@@ -9,7 +9,7 @@
 ## ✨ What's inside
 
 - 🌲 **Classic tree**: 4 tiers on a 7×7 board (1, 8, 16 and 20 cells, base corners cut off), 8 kittens and 3 ornaments per player.
-- 🌲🌲 **Big tree**: the same rules on 5 to 8 tiers, up to 15×15 and 221 cells. Raise the kittens to 10 or 12 if you like.
+- 🌲🌲 **Big tree**: the same rules on 5 to 8 tiers, up to 15×15 and 221 cells. Kittens on **Auto** scale with the tree: 8 on the classic tree, +2 per extra tier (10, 12, 14, 16). You can also pick a fixed count from 8 to 16.
 - 🧊 **2D or 3D**: play from above, or switch to a 3D view of the stacked tree and rotate it (⟲ ⟳ buttons, Q/E keys, or drag).
 - 🤖 **Play the computer** (you are white-and-gold **Snowball**, the computer is black-and-red **Coal**) or two players on one device.
 - 💾 Saves in your browser, with undo. No account, no server, no tracking.

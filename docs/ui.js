@@ -13,7 +13,10 @@
   const TIER_H = 0.42;       // tier step height, in cells
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  let settings = { mode: 'cpu', levels: 4, pieces: 8, view: '2d', spin: 30 };
+  let settings = { mode: 'cpu', levels: 4, pieces: 'auto', view: '2d', spin: 30 };
+  // Auto kittens: 8 on the classic tree, +2 per extra tier (balance_sim.js keeps games ~25 turns each).
+  const autoPieces = (levels) => 8 + 2 * (levels - 4);
+  const piecesFor = () => (settings.pieces === 'auto' ? autoPieces(settings.levels) : +settings.pieces);
   try { Object.assign(settings, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) { /* ignore */ }
   let state = null, history = [], selCat = false, busy = false, S = 64, cpuTimer = null, optCur = 0, lastNote = '';
   let geo = null;
@@ -59,6 +62,8 @@
   const zRing = (k) => (is3d() ? (geo.L - k) * H() : 0);
   const zOf = (r, c) => (L.onBoard(geo, r, c) ? zRing(geo.ring[r * geo.N + c]) : 0);
   const billboard = () => `rotateZ(${-settings.spin}deg) rotateX(${-TILT}deg)`;
+  // Tree-topper: floats about 1.5 cells above the top tier in 3D.
+  const starTransform = () => `translateZ(${zRing(0) + S * 0.6}px) ${billboard()} translateY(-${Math.round(S * 1.5)}px)`;
 
   // ---------- layout ----------
   function measure() {
@@ -85,7 +90,7 @@
     buildWalls();
     const star = boardEl.querySelector('.topstar');
     Object.assign(star.style, { left: geo.m * S + 'px', top: geo.m * S + 'px', width: S + 'px', height: S + 'px' });
-    star.style.transform = is3d() ? `translateZ(${zRing(0) + 2}px) ${billboard()} translateY(-95%)` : '';
+    star.style.transform = is3d() ? starTransform() : '';
     for (const i of geo.cells) {
       const el = cellEls[i];
       el.style.left = (i % N) * S + 'px';
@@ -152,7 +157,7 @@
       boardEl.appendChild(t);
     }
     const star = document.createElement('div');
-    star.className = 'topstar'; star.textContent = '⭐';
+    star.className = 'topstar'; star.innerHTML = '<span>⭐</span>';
     star.title = 'Treetop: the single cell of tier 1';
     boardEl.appendChild(star);
     for (const i of geo.cells) {
@@ -408,6 +413,7 @@
     $('mode').value = settings.mode;
     $('levels').value = String(settings.levels);
     $('pieces').value = String(settings.pieces);
+    $('pieces').options[0].textContent = `Auto (${autoPieces(settings.levels)})`;
     $('view').value = settings.view;
   }
 
@@ -429,7 +435,7 @@
 
   function newGame() {
     clearTimeout(cpuTimer);
-    state = L.newGame({ levels: settings.levels, pieces: settings.pieces });
+    state = L.newGame({ levels: settings.levels, pieces: piecesFor() });
     history = []; selCat = false; busy = false; lastNote = ''; optCur = 0;
     buildBoard();
     save(); render(); scheduleCpu();
@@ -466,7 +472,7 @@
       for (const el of pieceEls.values()) el.style.transition = 'none';
       placeAll();
       const star = boardEl.querySelector('.topstar');
-      star.style.transform = `translateZ(${zRing(0) + 2}px) ${billboard()} translateY(-95%)`;
+      star.style.transform = starTransform();
     }
   });
   window.addEventListener('pointerup', () => {
@@ -490,7 +496,7 @@
   $('rotR').addEventListener('click', () => rotate(45));
   $('mode').addEventListener('change', (e) => { settings.mode = e.target.value; persistSettings(); render(); scheduleCpu(); });
   $('levels').addEventListener('change', (e) => { settings.levels = +e.target.value; persistSettings(); newGame(); });
-  $('pieces').addEventListener('change', (e) => { settings.pieces = +e.target.value; persistSettings(); newGame(); });
+  $('pieces').addEventListener('change', (e) => { settings.pieces = e.target.value === 'auto' ? 'auto' : +e.target.value; persistSettings(); newGame(); });
   $('view').addEventListener('change', (e) => { settings.view = e.target.value; persistSettings(); measure(); });
   document.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'SELECT' || $('rules').open) return;
@@ -527,7 +533,7 @@
     tick();
   })();
 
-  if (!load()) state = L.newGame({ levels: settings.levels, pieces: settings.pieces });
+  if (!load()) state = L.newGame({ levels: settings.levels, pieces: piecesFor() });
   buildBoard();
   render();
   scheduleCpu();

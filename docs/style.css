@@ -138,7 +138,10 @@ kbd { background: #ffffff22; border-radius: 4px; padding: 0 5px; }
 .board.v3d .tier.decor { outline-offset: -3px; }
 .board.v3d .cell { border-color: #ffffff38; }
 .board.v3d .piece { transform-style: preserve-3d; }
-.board.v3d .topstar { font-size: calc(var(--S) * 1.1); opacity: 1; }
+.board.v3d .topstar { font-size: calc(var(--S) * 1.35); opacity: 1; filter: drop-shadow(0 0 16px #ffd86b) drop-shadow(0 0 4px #fff3c4); }
+.board:not(.v3d) .topstar { font-size: calc(var(--S) * .42); opacity: .55; }
+.topstar span { display: block; animation: starBob 2.6s ease-in-out infinite; }
+@keyframes starBob { 50% { translate: 0 -10%; } }
 .wall { position: absolute; pointer-events: none; display: none; }
 .board.v3d .wall { display: block; }
 #rotBox { display: inline-flex; gap: 4px; }

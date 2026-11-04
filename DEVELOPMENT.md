@@ -26,6 +26,10 @@ Simplifications: when a turn offers both a line and the all-on-the-tree graduati
 
 Pure CSS 3D, no WebGL. The board gets `rotateX(58deg) rotateZ(spin)` inside a `perspective` wrapper. Each tier's top face sits at `translateZ((L - ring) * 0.42 * cell)`, side walls are rotated divs, and pieces are billboards (`rotateZ(-spin) rotateX(-58deg)`) so they always face the camera. Cells stay real buttons, so clicks and keyboard focus work the same in 2D and 3D.
 
+## Kitten count on bigger trees
+
+`test/balance_sim.js` plays fast 1-ply CPU-vs-CPU games for every tree size and kitten count. With 8 kittens a game lasts about the same number of turns on every tree, but the pieces are spread thin on the big ones. Auto adds 2 kittens per extra tier, so a game on 8 tiers with 16 kittens lasts about 46 plies (23 turns each), close to the classic tree at its official 8. Above 16 games get long and the all-cats-on-the-tree win becomes unrealistic. Finding to revisit: on 5+ tiers the naughty (ornament) win almost disappears in CPU games, even when ornaments are hung 2 rings from the edge (`decor` option in `newGame`, not exposed in the UI).
+
 ## CPU
 
 Every full turn (ornament cell x placement, with line choice and promotion auto-resolved) is scored, then the top 10 are checked against the opponent's best reply (ornament cells sampled to 3). Eval: cats, captured ornaments, open pairs, ornaments exposed to a push off the tree. About 5 / 9 / 21 ms per move on 4 / 6 / 8 tiers.

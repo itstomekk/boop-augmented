@@ -11,3 +11,4 @@
 /test/*
 !/test/logic.test.js
 !/test/browser_test.py
+!/test/balance_sim.js

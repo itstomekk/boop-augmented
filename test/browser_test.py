@@ -89,6 +89,8 @@ try:
             # Big tree vs CPU, in 3D
             pg.select_option("#mode", "cpu"); pg.select_option("#levels", "8"); idle(pg)
             ok(pg.locator(".cell").count() == 221, f"{name}: 8-tier tree has 221 cells")
+            ok(pg.evaluate("__boop.state.n") == 16, f"{name}: Auto gives 16 kittens on 8 tiers")
+            ok(pg.locator("#pieces option").first.inner_text() == "Auto (16)", f"{name}: Auto label shows the count")
             dec = pg.evaluate("BoopLogic.ornamentCells(__boop.state)")
             pg.click(f'.cell[data-idx="{dec[0]}"]', force=True); idle(pg)
             pg.click('.cell[data-idx="20"]', force=True)

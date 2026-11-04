@@ -26,10 +26,10 @@
   const onBoard = (g, r, c) => r >= 0 && r < g.N && c >= 0 && c < g.N && g.mask[r * g.N + c];
 
   function newGame(opts) {
-    const o = Object.assign({ levels: 4, pieces: 8 }, opts || {});
+    const o = Object.assign({ levels: 4, pieces: 8, decor: DECOR_RING }, opts || {});
     const g = geometry(o.levels);
     const s = {
-      L: g.L, N: g.N, n: o.pieces,
+      L: g.L, N: g.N, n: o.pieces, decor: Math.max(1, Math.min(g.L - 2, o.decor | 0)),
       b: new Array(g.N * g.N).fill(null),
       pool: [{ k: o.pieces, c: 0, o: ORNAMENTS }, { k: o.pieces, c: 0, o: ORNAMENTS }],
       captured: [0, 0],          // opponent ornaments captured by each player
@@ -42,7 +42,7 @@
 
   function clone(s) {
     return {
-      L: s.L, N: s.N, n: s.n, b: s.b.slice(),
+      L: s.L, N: s.N, n: s.n, decor: s.decor, b: s.b.slice(),
       pool: [{ ...s.pool[0] }, { ...s.pool[1] }], captured: s.captured.slice(),
       turn: s.turn, phase: s.phase, options: s.options ? s.options.map((x) => x.slice()) : null,
       promoteWhen: s.promoteWhen, winner: s.winner, winReason: s.winReason, winLine: s.winLine,
@@ -73,7 +73,7 @@
   // Cells where an ornament may be hung: free decorating-tier cells, else the next tier down.
   function ornamentCells(s) {
     const g = geometry(s.L);
-    for (let ring = DECOR_RING; ring < g.L; ring++) {
+    for (let ring = s.decor || DECOR_RING; ring < g.L; ring++) {
       const free = g.cells.filter((i) => g.ring[i] === ring && !s.b[i]);
       if (free.length) return free;
     }
