@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boop Augmented 🎄</title>
+<meta name="description" content="A browser take on boop the Halls!: a Christmas tree seen from above (or in 3D), ornaments to knock off, kittens and cats. Classic 4-tier tree or a Big tree with up to 8 tiers.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="snow" aria-hidden="true"></canvas>
+<header class="top">
+  <h1>Boop <span>Augmented</span> 🎄</h1>
+  <div class="controls">
+    <label>Mode
+      <select id="mode">
+        <option value="cpu">vs Computer</option>
+        <option value="pvp">2 players</option>
+      </select>
+    </label>
+    <label>Tree
+      <select id="levels">
+        <option value="4">Classic (4 tiers)</option>
+        <option value="5">Big tree: 5 tiers</option>
+        <option value="6">Big tree: 6 tiers</option>
+        <option value="7">Big tree: 7 tiers</option>
+        <option value="8">Big tree: 8 tiers</option>
+      </select>
+    </label>
+    <label>Kittens
+      <select id="pieces">
+        <option value="8">8</option>
+        <option value="10">10</option>
+        <option value="12">12</option>
+      </select>
+    </label>
+    <label>View
+      <select id="view">
+        <option value="2d">2D (from above)</option>
+        <option value="3d">3D</option>
+      </select>
+    </label>
+    <span class="rot" id="rotBox">
+      <button id="rotL" type="button" aria-label="Rotate left">⟲</button>
+      <button id="rotR" type="button" aria-label="Rotate right">⟳</button>
+    </span>
+    <button id="newGame" type="button">New game</button>
+    <button id="undo" type="button">Undo</button>
+    <button id="rulesBtn" type="button">Rules</button>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="panel" id="panel0" data-player="0"></section>
+  <div class="boardWrap" id="boardWrap">
+    <div class="board" id="board" aria-label="Christmas tree board"></div>
+  </div>
+  <section class="panel" id="panel1" data-player="1"></section>
+</main>
+<p class="status" id="status" role="status" aria-live="polite"></p>
+
+<dialog id="rules">
+  <h2>Rules 🎄</h2>
+  <p class="hint">The tree is seen from above: the centre is the top, each ring outward is one tier lower. The ⭐ marks the treetop, the single cell of tier 1. Kittens and cats can sit there; ornaments can never get up there.</p>
+  <ol>
+    <li><b>Golden rule:</b> if you have no ornament on the tree, start your turn by hanging one on tier 2 (gold dashed ring). Ornaments do not boop.</li>
+    <li>Then place a kitten (or a cat) on any free cell.</li>
+    <li><b>Boop!</b> The new piece pushes every neighbour (8 directions) one cell away, if the cell behind it is free. A kitten or cat pushed off the tree goes back to its owner.</li>
+    <li>Kittens cannot boop cats. Cats boop everything.</li>
+    <li>Ornaments move sideways or down the tree, never up. Knock off your opponent's ornament and you capture it; knock off your own and you get it back.</li>
+    <li><b>Pounce:</b> a cat pushed onto an ornament takes it (captured if it is the opponent's, returned if it is its own) and goes back to its owner's pool. A kitten pushed onto an ornament stays put.</li>
+    <li>Three of your pieces in a row leave the tree and the kittens become cats. If several lines form, you pick one.</li>
+    <li>All your pieces on the tree? Take one back; it returns as a cat.</li>
+  </ol>
+  <p><b>Win nice:</b> three cats in a row, or all your pieces on the tree as cats. <b>Win naughty:</b> capture 3 of your opponent's ornaments.</p>
+  <p class="hint">Big tree: same rules, 5 to 8 tiers. 3D view: rotate with ⟲ ⟳, the Q/E keys or by dragging the board. Keys: <kbd>K</kbd> kitten, <kbd>C</kbd> cat, <kbd>U</kbd> undo.</p>
+  <form method="dialog"><button>Let's play!</button></form>
+</dialog>
+
+<script src="logic.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>

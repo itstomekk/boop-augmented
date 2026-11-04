@@ -1,0 +1,13 @@
+# Deny by default; allowlist what ships.
+/*
+!/.gitignore
+!/README.md
+!/DEVELOPMENT.md
+!/UPDATING.md
+!/LICENSE
+!/docs/
+!/.github/
+!/test/
+/test/*
+!/test/logic.test.js
+!/test/browser_test.py
