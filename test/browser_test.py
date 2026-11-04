@@ -80,6 +80,21 @@ try:
             pg.click('.cell[data-idx="37"]', force=True); idle(pg)
             b = pg.evaluate("__boop.state.b")
             ok(b[37] and b[37]["p"] == 1 and b[39] and b[39]["p"] == 0, f"{name}: 3D click places and boops")
+            # Board fits its frame, the star is centred on the treetop and turns with the tree
+            def star_offset():
+                sb = pg.locator(".topstar .sp.a i").bounding_box(); cb = pg.locator('.cell[data-idx="24"]').bounding_box()
+                return abs((sb["x"] + sb["width"] / 2) - (cb["x"] + cb["width"] / 2))
+            ok(pg.locator(".topstar .sp").count() == 2, f"{name}: 3D star is two crossed planes")
+            for k in range(3):
+                pg.click("#rotR"); pg.wait_for_timeout(550)
+                ok(star_offset() < pg.evaluate("__boop.cellSize()") * 0.35, f"{name}: star centred over treetop after rotation {k+1} ({star_offset():.1f}px)")
+            pg.click("#tiltDown"); pg.click("#zoomIn"); pg.wait_for_timeout(500)
+            cam = pg.evaluate("[__boop.settings.tilt, __boop.settings.zoom]")
+            ok(cam[0] == 70 and abs(cam[1] - 1.2) < 1e-9, f"{name}: tilt and zoom buttons ({cam})")
+            pg.click("#camReset"); pg.wait_for_timeout(500)
+            wb = pg.locator("#boardWrap").bounding_box(); bb = pg.locator("#board").bounding_box()
+            ok(bb["y"] >= wb["y"] - 4 and bb["y"] + bb["height"] <= wb["y"] + wb["height"] + 4 and bb["x"] >= -2 and bb["x"] + bb["width"] <= vp["width"] + 2,
+               f"{name}: whole 3D board inside its frame")
             spin0 = pg.evaluate("__boop.settings.spin")
             pg.click("#rotR"); pg.wait_for_timeout(500)
             ok(pg.evaluate("__boop.settings.spin") == (spin0 + 45) % 360, f"{name}: rotate button turns the tree")
@@ -90,13 +105,14 @@ try:
             pg.select_option("#mode", "cpu"); pg.select_option("#levels", "8"); idle(pg)
             ok(pg.locator(".cell").count() == 221, f"{name}: 8-tier tree has 221 cells")
             ok(pg.evaluate("__boop.state.n") == 16, f"{name}: Auto gives 16 kittens on 8 tiers")
+            ok(pg.evaluate("[__boop.state.pool[0].o, __boop.state.ornActive, __boop.state.decor]") == [6, 3, 5], f"{name}: Auto ornaments on 8 tiers: 6, 3 at once, ring 5")
             ok(pg.locator("#pieces option").first.inner_text() == "Auto (16)", f"{name}: Auto label shows the count")
             dec = pg.evaluate("BoopLogic.ornamentCells(__boop.state)")
             pg.click(f'.cell[data-idx="{dec[0]}"]', force=True); idle(pg)
             pg.click('.cell[data-idx="20"]', force=True)
             idle(pg, "&& __boop.state.turn === 0 && __boop.state.moves === 2")
             st = pg.evaluate("__boop.state")
-            ok(any(q and q["kind"] == "o" and q["p"] == 1 for q in st["b"]) and st["phase"] == "place", f"{name}: CPU replied on the big tree")
+            ok(any(q and q["kind"] == "o" and q["p"] == 1 for q in st["b"]) and st["phase"] in ("place", "ornament"), f"{name}: CPU replied on the big tree (phase {st['phase']})")
 
             # Screenshots (synthetic positions)
             for levels, view, spin, fn in [(4, "3d", 30, "classic-3d"), (4, "2d", 30, "classic-2d"), (8, "2d", 30, "big-2d"), (8, "3d", 30, "big-3d")]:

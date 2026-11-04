@@ -26,12 +26,14 @@
   const onBoard = (g, r, c) => r >= 0 && r < g.N && c >= 0 && c < g.N && g.mask[r * g.N + c];
 
   function newGame(opts) {
-    const o = Object.assign({ levels: 4, pieces: 8, decor: DECOR_RING }, opts || {});
+    // ornaments: per player; ornActive: how many may hang at once; ornWin: captures needed to win.
+    const o = Object.assign({ levels: 4, pieces: 8, decor: DECOR_RING, ornaments: ORNAMENTS, ornActive: 1, ornWin: ORNAMENTS }, opts || {});
     const g = geometry(o.levels);
     const s = {
       L: g.L, N: g.N, n: o.pieces, decor: Math.max(1, Math.min(g.L - 2, o.decor | 0)),
+      ornActive: Math.max(1, o.ornActive | 0), ornWin: Math.max(1, o.ornWin | 0),
       b: new Array(g.N * g.N).fill(null),
-      pool: [{ k: o.pieces, c: 0, o: ORNAMENTS }, { k: o.pieces, c: 0, o: ORNAMENTS }],
+      pool: [{ k: o.pieces, c: 0, o: o.ornaments }, { k: o.pieces, c: 0, o: o.ornaments }],
       captured: [0, 0],          // opponent ornaments captured by each player
       turn: 0, phase: 'ornament', options: null, promoteWhen: null,
       winner: null, winReason: null, winLine: null, nextId: 1, moves: 0,
@@ -42,7 +44,7 @@
 
   function clone(s) {
     return {
-      L: s.L, N: s.N, n: s.n, decor: s.decor, b: s.b.slice(),
+      L: s.L, N: s.N, n: s.n, decor: s.decor, ornActive: s.ornActive, ornWin: s.ornWin, b: s.b.slice(),
       pool: [{ ...s.pool[0] }, { ...s.pool[1] }], captured: s.captured.slice(),
       turn: s.turn, phase: s.phase, options: s.options ? s.options.map((x) => x.slice()) : null,
       promoteWhen: s.promoteWhen, winner: s.winner, winReason: s.winReason, winLine: s.winLine,
@@ -50,7 +52,9 @@
     };
   }
 
-  const hasOrnamentOnTree = (s, p) => s.b.some((q) => q && q.kind === 'o' && q.p === p);
+  const ornamentsOnTree = (s, p) => s.b.reduce((n, q) => n + (q && q.kind === 'o' && q.p === p ? 1 : 0), 0);
+  const ornActive = (s) => s.ornActive || 1;
+  const ornWin = (s) => s.ornWin || ORNAMENTS;
 
   // Phase after the (optional) ornament step at the start of a turn.
   function afterOrnamentStep(s) {
@@ -60,7 +64,8 @@
   }
   function startTurn(s) {
     s.options = null; s.promoteWhen = null;
-    if (!hasOrnamentOnTree(s, s.turn) && s.pool[s.turn].o > 0 && ornamentCells(s).length) s.phase = 'ornament';
+    // Golden rule: fewer of your ornaments on the tree than allowed -> hang one (one per turn).
+    if (ornamentsOnTree(s, s.turn) < ornActive(s) && s.pool[s.turn].o > 0 && ornamentCells(s).length) s.phase = 'ornament';
     else afterOrnamentStep(s);
   }
   function endTurn(s) {
@@ -182,8 +187,8 @@
   // Only after all movement: wins, then graduation / all-pieces-on-tree for the active player.
   function resolveAfterMove(n) {
     const p = n.turn;
-    if (n.captured[p] >= ORNAMENTS) return win(n, p, 'naughty');
-    if (n.captured[1 - p] >= ORNAMENTS) return win(n, 1 - p, 'naughty');
+    if (n.captured[p] >= ornWin(n)) return win(n, p, 'naughty');
+    if (n.captured[1 - p] >= ornWin(n)) return win(n, 1 - p, 'naughty');
     const lines = findLines(n, p);
     const catLine = lines.find((L) => L.every((i) => n.b[i].kind === 'c'));
     if (catLine) return win(n, p, 'nice-line', catLine);
@@ -313,12 +318,12 @@
   }
 
   function bestMove(s, opts) {
-    const o = Object.assign({ depth: 2, top: 10, rand: 0.5 }, opts || {});
+    const o = Object.assign({ depth: 2, top: s.N > 11 ? 6 : 10, rand: 0.5 }, opts || {});
     const me = s.turn;
     if (s.phase === 'chooseLine') return { line: bestLine(s) };
     if (s.phase === 'promote') return { promote: bestPromote(s) };
     if (s.phase !== 'ornament' && s.phase !== 'place') return null;
-    const cands = turnCandidates(s).map((cd) => ({ cd, v: evaluate(cd.st, me) + Math.random() * o.rand }));
+    const cands = turnCandidates(s, 8).map((cd) => ({ cd, v: evaluate(cd.st, me) + Math.random() * o.rand }));
     if (!cands.length) return null;
     cands.sort((a, b) => b.v - a.v);
     let pick = cands[0];
@@ -327,7 +332,7 @@
       for (const c of cands.slice(0, o.top)) {
         let worst = evaluate(c.cd.st, me);
         if (c.cd.st.phase !== 'over') {
-          for (const r of turnCandidates(c.cd.st, 3)) {
+          for (const r of turnCandidates(c.cd.st, c.cd.st.N > 9 ? 1 : 3)) {
             const v = evaluate(r.st, me);
             if (v < worst) worst = v;
             if (worst <= -1e6) break;
@@ -340,7 +345,7 @@
   }
 
   const api = {
-    ORNAMENTS, DECOR_RING, geometry, onBoard, newGame, clone, placeOrnament, ornamentCells,
+    ORNAMENTS, DECOR_RING, geometry, onBoard, newGame, clone, placeOrnament, ornamentCells, ornamentsOnTree,
     play, chooseLine, promote, findLines, legalMoves, onBoardCount, evaluate, bestMove, autoResolve,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

@@ -4,10 +4,11 @@
 const L = require('../docs/logic.js');
 const GAMES = +process.env.GAMES || 12, CAP = +process.env.CAP || 400;
 const sizes = (process.env.SIZES || '4,5,6,7,8').split(',').map(Number);
-const counts = (process.env.COUNTS || '8,10,12,16,20').split(',').map(Number);
+const counts = (process.env.COUNTS || '8,10,12,16,20').split(',').map((x) => (x === 'auto' ? 'auto' : Number(x)));
 function playGame(levels, pieces) {
   const decor = process.env.DECOR === 'edge' ? levels - 3 : 1;
-  let s = L.newGame({ levels, pieces, decor });
+  const ornActive = +(process.env.ACTIVE || 1), ornaments = +(process.env.ORN || 3);
+  let s = L.newGame({ levels, pieces, decor, ornActive, ornaments });
   let plies = 0;
   while (s.phase !== 'over' && plies < CAP) {
     const m = L.bestMove(s, { depth: 1, rand: 25 });
@@ -24,7 +25,8 @@ function playGame(levels, pieces) {
 console.log('tiers cells kittens  ended  avg_turns  nice  naughty');
 for (const lv of sizes) {
   const cells = L.geometry(lv).cells.length;
-  for (const n of counts) {
+  for (const n0 of counts) {
+    const n = n0 === 'auto' ? 8 + 2 * (lv - 4) : n0;
     let ended = 0, turns = 0, nice = 0, naughty = 0;
     for (let g = 0; g < GAMES; g++) {
       const r = playGame(lv, n);

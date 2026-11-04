@@ -37,6 +37,12 @@
         <option value="16">16</option>
       </select>
     </label>
+    <label>Ornaments
+      <select id="ornaments">
+        <option value="auto">Auto (more on big trees)</option>
+        <option value="classic">Classic (3, one at a time)</option>
+      </select>
+    </label>
     <label>View
       <select id="view">
         <option value="2d">2D (from above)</option>
@@ -46,6 +52,11 @@
     <span class="rot" id="rotBox">
       <button id="rotL" type="button" aria-label="Rotate left">⟲</button>
       <button id="rotR" type="button" aria-label="Rotate right">⟳</button>
+      <button id="tiltUp" type="button" aria-label="View from higher">⤒</button>
+      <button id="tiltDown" type="button" aria-label="View from lower">⤓</button>
+      <button id="zoomOut" type="button" aria-label="Zoom out">−</button>
+      <button id="zoomIn" type="button" aria-label="Zoom in">+</button>
+      <button id="camReset" type="button" aria-label="Reset view">⌂</button>
     </span>
     <button id="newGame" type="button">New game</button>
     <button id="undo" type="button">Undo</button>
@@ -76,7 +87,7 @@
     <li>All your pieces on the tree? Take one back; it returns as a cat.</li>
   </ol>
   <p><b>Win nice:</b> three cats in a row, or all your pieces on the tree as cats. <b>Win naughty:</b> capture 3 of your opponent's ornaments.</p>
-  <p class="hint">Big tree: same rules, 5 to 8 tiers. Kittens on Auto: 8 on the classic tree, 2 more per extra tier (16 on 8 tiers). 3D view: rotate with ⟲ ⟳, the Q/E keys or by dragging the board. Keys: <kbd>K</kbd> kitten, <kbd>C</kbd> cat, <kbd>U</kbd> undo.</p>
+  <p class="hint">Big tree: same rules, 5 to 8 tiers. Kittens on Auto: 8 on the classic tree, 2 more per extra tier (16 on 8 tiers). Ornaments on Auto: more of them (up to 6), up to 3 hanging at once, hung on the 3rd tier from the bottom so they stay in reach. Capturing 3 still wins. 3D view: drag the board to orbit (left/right turns, up/down tilts), scroll to zoom, or use the ⟲ ⟳ ⤒ ⤓ − + ⌂ buttons and the Q/E, W/S, +/- keys. Keys: <kbd>K</kbd> kitten, <kbd>C</kbd> cat, <kbd>U</kbd> undo.</p>
   <form method="dialog"><button>Let's play!</button></form>
 </dialog>
 

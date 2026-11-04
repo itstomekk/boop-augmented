@@ -121,6 +121,17 @@ ok(res.state.phase === 'promote' && res.state.turn === 0, 'promote phase at end 
 const pr = L.promote(res.state, at(0, 1));
 ok(pr.state.pool[0].c === 1 && pr.state.turn === 1, 'kitten graduated, turn passed');
 
+// Big-tree ornament option: two may hang at once, decorating ring nearer the edge
+s = L.newGame({ levels: 6, pieces: 12, ornaments: 5, ornActive: 2, decor: 3 });
+ok(L.ornamentCells(s).every((i) => L.geometry(6).ring[i] === 3), 'decor ring option');
+s = L.placeOrnament(s, L.ornamentCells(s)[0]).state;
+s = L.play(s, L.legalMoves(s).find((m) => L.geometry(6).ring[m.idx] === 0).idx, false).state;   // P0 kitten on the top
+s = L.placeOrnament(s, L.ornamentCells(s)[5]).state;
+s = L.play(s, L.legalMoves(s)[0].idx, false).state;                                              // P1
+ok(s.turn === 0 && s.phase === 'ornament' && L.ornamentsOnTree(s, 0) === 1, 'second ornament must be hung');
+s = L.placeOrnament(s, L.ornamentCells(s)[10]).state;
+ok(L.ornamentsOnTree(s, 0) === 2 && s.pool[0].o === 3 && s.phase === 'place', 'two ornaments on the tree');
+
 // CPU: grabs an instant naughty win, and self-play stays legal on classic and big trees
 s = setup([[0, 3, 1, 'o']]);
 s.captured[0] = 2;

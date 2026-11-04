@@ -24,11 +24,11 @@ Simplifications: when a turn offers both a line and the all-on-the-tree graduati
 
 ## 3D view
 
-Pure CSS 3D, no WebGL. The board gets `rotateX(58deg) rotateZ(spin)` inside a `perspective` wrapper. Each tier's top face sits at `translateZ((L - ring) * 0.42 * cell)`, side walls are rotated divs, and pieces are billboards (`rotateZ(-spin) rotateX(-58deg)`) so they always face the camera. Cells stay real buttons, so clicks and keyboard focus work the same in 2D and 3D.
+Pure CSS 3D, no WebGL. The board gets `scale(zoom) rotateX(tilt) rotateZ(spin)` inside a `perspective` wrapper; the cell size is chosen so the board fits at any spin and tilt (diagonal vs tower height). The star is two crossed standing planes on the treetop cell, so it turns with the tree. Each tier's top face sits at `translateZ((L - ring) * 0.42 * cell)`, side walls are rotated divs, and pieces are billboards (`rotateZ(-spin) rotateX(-58deg)`) so they always face the camera. Cells stay real buttons, so clicks and keyboard focus work the same in 2D and 3D.
 
 ## Kitten count on bigger trees
 
-`test/balance_sim.js` plays fast 1-ply CPU-vs-CPU games for every tree size and kitten count. With 8 kittens a game lasts about the same number of turns on every tree, but the pieces are spread thin on the big ones. Auto adds 2 kittens per extra tier, so a game on 8 tiers with 16 kittens lasts about 46 plies (23 turns each), close to the classic tree at its official 8. Above 16 games get long and the all-cats-on-the-tree win becomes unrealistic. Finding to revisit: on 5+ tiers the naughty (ornament) win almost disappears in CPU games, even when ornaments are hung 2 rings from the edge (`decor` option in `newGame`, not exposed in the UI).
+`test/balance_sim.js` plays fast 1-ply CPU-vs-CPU games for every tree size and kitten count. With 8 kittens a game lasts about the same number of turns on every tree, but the pieces are spread thin on the big ones. Auto adds 2 kittens per extra tier, so a game on 8 tiers with 16 kittens lasts about 46 plies (23 turns each), close to the classic tree at its official 8. Above 16 games get long and the all-cats-on-the-tree win becomes unrealistic. On 5+ tiers the naughty (ornament) win almost disappeared with the official ornament rule: ornaments hang near the centre, far from the edge. More ornaments alone did not fix it; more ornaments hung nearer the edge did (6 tiers, 3 at once on ring L-3: 5 of 8 CPU games won naughty). Auto ornaments (`ornCfg` in `ui.js`): `ornaments = min(6, L-1)`, `ornActive = 1 + floor((L-3)/2)`, `decor = L-3`; on 4 tiers this equals the official rule. `newGame` options: `ornaments`, `ornActive`, `ornWin`, `decor`.
 
 ## CPU
 

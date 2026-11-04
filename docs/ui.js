@@ -9,15 +9,23 @@
   const SEEN_KEY = 'boop-augmented-seen-rules-v1';
   const NAMES = ['Snowball', 'Coal'];
   const CPU_PLAYER = 1;
-  const TILT = 58;           // 3D camera tilt (deg)
+  const TILT0 = 58, SPIN0 = 30; // default 3D camera tilt / spin (deg)
   const TIER_H = 0.42;       // tier step height, in cells
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  let settings = { mode: 'cpu', levels: 4, pieces: 'auto', view: '2d', spin: 30 };
+  let settings = { mode: 'cpu', levels: 4, pieces: 'auto', ornaments: 'auto', view: '2d', spin: SPIN0, tilt: TILT0, zoom: 1 };
   // Auto kittens: 8 on the classic tree, +2 per extra tier (balance_sim.js keeps games ~25 turns each).
   const autoPieces = (levels) => 8 + 2 * (levels - 4);
   const piecesFor = () => (settings.pieces === 'auto' ? autoPieces(settings.levels) : +settings.pieces);
+  // Auto ornaments on bigger trees (balance_sim.js): more ornaments, several hanging at once, and the
+  // decorating tier is always 3rd from the bottom, so they stay as close to the edge as on the classic tree.
+  // On the classic 4-tier tree Auto equals the official rule (3 ornaments, 1 at a time, tier 2).
+  const ornCfg = (levels) => (settings.ornaments === 'classic' || levels === 4
+    ? { ornaments: 3, ornActive: 1, decor: 1 }
+    : { ornaments: Math.min(6, levels - 1), ornActive: 1 + Math.floor((levels - 3) / 2), decor: levels - 3 });
+  const gameOpts = () => Object.assign({ levels: settings.levels, pieces: piecesFor() }, ornCfg(settings.levels));
   try { Object.assign(settings, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) { /* ignore */ }
+  let cpuPlan = null;
   let state = null, history = [], selCat = false, busy = false, S = 64, cpuTimer = null, optCur = 0, lastNote = '';
   let geo = null;
   const pieceEls = new Map();
@@ -61,9 +69,10 @@
   const H = () => S * TIER_H;
   const zRing = (k) => (is3d() ? (geo.L - k) * H() : 0);
   const zOf = (r, c) => (L.onBoard(geo, r, c) ? zRing(geo.ring[r * geo.N + c]) : 0);
-  const billboard = () => `rotateZ(${-settings.spin}deg) rotateX(${-TILT}deg)`;
-  // Tree-topper: floats about 1.5 cells above the top tier in 3D.
-  const starTransform = () => `translateZ(${zRing(0) + S * 0.6}px) ${billboard()} translateY(-${Math.round(S * 1.5)}px)`;
+  const billboard = () => `rotateZ(${-settings.spin}deg) rotateX(${-settings.tilt}deg)`;
+  const camTransform = () => `scale(${settings.zoom}) rotateX(${settings.tilt}deg) rotateZ(${settings.spin}deg)`;
+  // Tree-topper: a standing 3D star centred on the treetop cell, lifted a little above it.
+  const starTransform = () => `translateZ(${zRing(0) + S * 0.25}px)`;
 
   // ---------- layout ----------
   function measure() {
@@ -71,16 +80,18 @@
     const top = wrapEl.getBoundingClientRect().top + window.scrollY;
     const h = Math.max(300, window.innerHeight - top - 60);
     const N = geo.N;
-    if (is3d()) S = Math.max(16, Math.min(80, Math.floor(Math.min(w / (N * 1.42), h / (N * 0.95 + geo.L * TIER_H)))));
+    // 3D: size the board so it fits at ANY spin and tilt (diagonal x tower height), then zoom on top.
+    const D = N * 1.42, T = geo.L * TIER_H + 1.6;
+    if (is3d()) S = Math.max(14, Math.min(80, Math.floor(Math.min(w / D, h / Math.hypot(D, T)) * 0.94)));
     else S = Math.max(18, Math.min(96, Math.floor(Math.min(w, h) / N)));
     document.documentElement.style.setProperty('--S', S + 'px');
     const W = N * S;
     wrapEl.classList.toggle('v3d', is3d());
     boardEl.classList.toggle('v3d', is3d());
-    wrapEl.style.height = is3d() ? Math.round(W * 1.02 + geo.L * H()) + 'px' : '';
+    wrapEl.style.height = is3d() ? Math.round(S * Math.hypot(D, T) + 24) + 'px' : '';
     boardEl.style.width = W + 'px';
     boardEl.style.height = W + 'px';
-    boardEl.style.transform = is3d() ? `rotateX(${TILT}deg) rotateZ(${settings.spin}deg)` : '';
+    boardEl.style.transform = is3d() ? camTransform() : '';
     boardEl.style.setProperty('--notch', `polygon(${S}px 0, ${W - S}px 0, ${W - S}px ${S}px, ${W}px ${S}px, ${W}px ${W - S}px, ${W - S}px ${W - S}px, ${W - S}px ${W}px, ${S}px ${W}px, ${S}px ${W - S}px, 0 ${W - S}px, 0 ${S}px, ${S}px ${S}px)`);
     boardEl.querySelectorAll('.tier').forEach((t) => {
       const k = +t.dataset.ring, off = (geo.m - k) * S, size = (2 * k + 1) * S;
@@ -149,7 +160,7 @@
     cellEls = [];
     for (let k = geo.L - 1; k >= 0; k--) {
       const t = document.createElement('div');
-      t.className = 'tier' + (k === geo.L - 1 ? ' base' : '') + (k === 0 ? ' t0' : '') + (k === L.DECOR_RING ? ' decor' : '');
+      t.className = 'tier' + (k === geo.L - 1 ? ' base' : '') + (k === 0 ? ' t0' : '') + (k === (state.decor || L.DECOR_RING) ? ' decor' : '');
       t.dataset.ring = k;
       if (k) t.style.background = `hsl(145 52% ${tierLight(k).toFixed(0)}%)`;
       if (k && k < geo.L - 1) t.style.boxShadow = '0 0 0 2px #06200f, 0 7px 16px #000c, inset 0 2px 0 #ffffff30';
@@ -157,7 +168,7 @@
       boardEl.appendChild(t);
     }
     const star = document.createElement('div');
-    star.className = 'topstar'; star.innerHTML = '<span>⭐</span>';
+    star.className = 'topstar'; star.innerHTML = '<span class="sp a"><i>⭐</i></span><span class="sp b"><i>⭐</i></span>';
     star.title = 'Treetop: the single cell of tier 1';
     boardEl.appendChild(star);
     for (const i of geo.cells) {
@@ -341,12 +352,15 @@
     busy = true;
     render();
     cpuTimer = setTimeout(() => {
-      const m = L.bestMove(state);
+      // Reuse the placement planned together with the ornament, if it is still legal.
+      let m = cpuPlan && state.phase === 'place' && !state.b[cpuPlan.idx] && state.pool[state.turn][cpuPlan.cat ? 'c' : 'k'] > 0 ? cpuPlan : null;
+      cpuPlan = null;
+      if (!m) m = L.bestMove(state);
       busy = false;
       if (!m) { render(); return; }
       if (m.line !== undefined) return act('line', m.line);
       if (m.promote !== undefined) return act('promote', m.promote);
-      if (m.orn !== null && m.orn !== undefined) return act('orn', m.orn); // afterAct schedules the kitten
+      if (m.orn !== null && m.orn !== undefined && state.phase === 'ornament') { cpuPlan = { idx: m.idx, cat: m.cat }; return act('orn', m.orn); }
       act('play', { idx: m.idx, cat: m.cat });
     }, reduced ? 30 : 520);
   }
@@ -356,7 +370,7 @@
     const el = $('panel' + p);
     const pl = state.pool[p];
     const ob = L.onBoardCount(state, p);
-    const ornOn = state.b.some((q) => q && q.kind === 'o' && q.p === p);
+    const ornOn = L.ornamentsOnTree(state, p), ornMax = state.ornActive || 1;
     const active = state.phase !== 'over' && state.turn === p;
     const canPick = active && humanTurn() && state.phase === 'place' && !busy;
     const cat = active ? effectiveCat() : null;
@@ -369,7 +383,7 @@
         aria-pressed="${active && cat === false}">${catSVG(p, false)}<span class="lbl"><b>${pl.k}</b><small>kittens (K)</small></span></button>
       <button type="button" class="pick${active && cat === true ? ' sel' : ''}" data-cat="1" ${canPick && pl.c ? '' : 'disabled'}
         aria-pressed="${active && cat === true}">${catSVG(p, true)}<span class="lbl"><b>${pl.c}</b><small>cats (C)</small></span></button>
-      <div class="row">${ornSVG(p)}<span>Ornament: ${ornOn ? 'on tree' : 'none'} · pool ${pl.o}</span></div>
+      <div class="row">${ornSVG(p)}<span>Ornaments: ${ornOn}/${ornMax} on tree · pool ${pl.o}</span></div>
       <div class="row"><span>Captured:</span><span class="slots">${slots}</span></div>
       <div class="row">On tree: ${ob.total}/${state.n} · cats ${ob.cats}</div>`;
     el.querySelectorAll('.pick').forEach((b) => b.addEventListener('click', () => { selCat = b.dataset.cat === '1'; render(); }));
@@ -390,7 +404,7 @@
     } else if (isCpu(state.turn)) {
       msg = `${pre}${who} is thinking…`;
     } else if (state.phase === 'ornament') {
-      msg = `${pre}${who}: hang an ornament on tier 2 (gold dashed ring).`;
+      msg = `${pre}${who}: hang an ornament on the gold dashed ring (tier ${(state.decor || 1) + 1}).`;
       for (const i of L.ornamentCells(state)) cellEls[i].classList.add('allowed');
     } else if (state.phase === 'chooseLine') {
       msg = `${pre}${who}: several lines. Click a piece in the highlighted line, then click it again to graduate it.`;
@@ -415,6 +429,7 @@
     $('pieces').value = String(settings.pieces);
     $('pieces').options[0].textContent = `Auto (${autoPieces(settings.levels)})`;
     $('view').value = settings.view;
+    $('ornaments').value = settings.ornaments;
   }
 
   // ---------- save ----------
@@ -435,7 +450,7 @@
 
   function newGame() {
     clearTimeout(cpuTimer);
-    state = L.newGame({ levels: settings.levels, pieces: piecesFor() });
+    state = L.newGame(gameOpts());
     history = []; selCat = false; busy = false; lastNote = ''; optCur = 0;
     buildBoard();
     save(); render(); scheduleCpu();
@@ -453,28 +468,42 @@
   function rotate(deg) {
     settings.spin = ((settings.spin + deg) % 360 + 360) % 360;
     persistSettings();
-    measure();
+    applyCamera();
+  }
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  function setTilt(t) { settings.tilt = clamp(t, 0, 84); persistSettings(); applyCamera(); }
+  function setZoom(z) { settings.zoom = clamp(z, 0.5, 2.4); persistSettings(); applyCamera(); }
+  function resetCamera() { settings.spin = SPIN0; settings.tilt = TILT0; settings.zoom = 1; persistSettings(); applyCamera(); }
+  // Camera change without rebuilding the board: board transform + billboards.
+  function applyCamera() {
+    if (!is3d()) return;
+    boardEl.style.transform = camTransform();
+    placeAll();
   }
 
   // ---------- 3D drag-to-rotate ----------
   let dragging = false, suppressClick = false, drag0 = null;
   wrapEl.addEventListener('pointerdown', (e) => {
     if (!is3d() || e.button !== 0) return;
-    drag0 = { x: e.clientX, spin: settings.spin };
+    drag0 = { x: e.clientX, y: e.clientY, spin: settings.spin, tilt: settings.tilt };
   });
   window.addEventListener('pointermove', (e) => {
     if (!drag0) return;
-    const dx = e.clientX - drag0.x;
-    if (!dragging && Math.abs(dx) > 6) { dragging = true; clearGhost(); wrapEl.classList.add('dragging'); boardEl.style.transition = 'none'; }
+    const dx = e.clientX - drag0.x, dy = e.clientY - drag0.y;
+    if (!dragging && Math.abs(dx) + Math.abs(dy) > 6) { dragging = true; clearGhost(); wrapEl.classList.add('dragging'); boardEl.style.transition = 'none'; }
     if (dragging) {
       settings.spin = drag0.spin + dx * 0.4;
-      boardEl.style.transform = `rotateX(${TILT}deg) rotateZ(${settings.spin}deg)`;
+      settings.tilt = clamp(drag0.tilt + dy * 0.3, 0, 84);
       for (const el of pieceEls.values()) el.style.transition = 'none';
+      boardEl.style.transform = camTransform();
       placeAll();
-      const star = boardEl.querySelector('.topstar');
-      star.style.transform = starTransform();
     }
   });
+  wrapEl.addEventListener('wheel', (e) => {
+    if (!is3d()) return;
+    e.preventDefault();
+    setZoom(settings.zoom * Math.exp(-e.deltaY * 0.0015));
+  }, { passive: false });
   window.addEventListener('pointerup', () => {
     if (!drag0) return;
     if (dragging) {
@@ -494,9 +523,15 @@
   $('rulesBtn').addEventListener('click', () => $('rules').showModal());
   $('rotL').addEventListener('click', () => rotate(-45));
   $('rotR').addEventListener('click', () => rotate(45));
+  $('tiltUp').addEventListener('click', () => setTilt(settings.tilt - 12));
+  $('tiltDown').addEventListener('click', () => setTilt(settings.tilt + 12));
+  $('zoomIn').addEventListener('click', () => setZoom(settings.zoom * 1.2));
+  $('zoomOut').addEventListener('click', () => setZoom(settings.zoom / 1.2));
+  $('camReset').addEventListener('click', resetCamera);
   $('mode').addEventListener('change', (e) => { settings.mode = e.target.value; persistSettings(); render(); scheduleCpu(); });
   $('levels').addEventListener('change', (e) => { settings.levels = +e.target.value; persistSettings(); newGame(); });
   $('pieces').addEventListener('change', (e) => { settings.pieces = e.target.value === 'auto' ? 'auto' : +e.target.value; persistSettings(); newGame(); });
+  $('ornaments').addEventListener('change', (e) => { settings.ornaments = e.target.value; persistSettings(); newGame(); });
   $('view').addEventListener('change', (e) => { settings.view = e.target.value; persistSettings(); measure(); });
   document.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'SELECT' || $('rules').open) return;
@@ -505,6 +540,10 @@
     else if (k === 'c') { selCat = true; render(); }
     else if (k === 'u') undo();
     else if (k === 'q' && is3d()) rotate(-45);
+    else if (k === 'w' && is3d()) setTilt(settings.tilt - 12);
+    else if (k === 's' && is3d()) setTilt(settings.tilt + 12);
+    else if ((k === '+' || k === '=') && is3d()) setZoom(settings.zoom * 1.2);
+    else if (k === '-' && is3d()) setZoom(settings.zoom / 1.2);
     else if (k === 'e' && is3d()) rotate(45);
   });
   window.addEventListener('resize', () => geo && measure());
@@ -533,7 +572,7 @@
     tick();
   })();
 
-  if (!load()) state = L.newGame({ levels: settings.levels, pieces: piecesFor() });
+  if (!load()) state = L.newGame(gameOpts());
   buildBoard();
   render();
   scheduleCpu();

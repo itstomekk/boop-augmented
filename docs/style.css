@@ -138,10 +138,20 @@ kbd { background: #ffffff22; border-radius: 4px; padding: 0 5px; }
 .board.v3d .tier.decor { outline-offset: -3px; }
 .board.v3d .cell { border-color: #ffffff38; }
 .board.v3d .piece { transform-style: preserve-3d; }
-.board.v3d .topstar { font-size: calc(var(--S) * 1.35); opacity: 1; filter: drop-shadow(0 0 16px #ffd86b) drop-shadow(0 0 4px #fff3c4); }
+/* Tree-topper. 2D: small faint marker on the treetop cell. 3D: two crossed standing planes,
+   so the star is a real object on the tree and turns with it. */
+.topstar .sp { display: grid; place-items: center; }
+.topstar i { font-style: normal; line-height: 1; }
 .board:not(.v3d) .topstar { font-size: calc(var(--S) * .42); opacity: .55; }
-.topstar span { display: block; animation: starBob 2.6s ease-in-out infinite; }
-@keyframes starBob { 50% { translate: 0 -10%; } }
+.board:not(.v3d) .topstar .sp.b { display: none; }
+.board.v3d .topstar { filter: none; opacity: 1; transform-style: preserve-3d; display: block; font-size: calc(var(--S) * .78); }
+.board.v3d .topstar .sp { position: absolute; inset: 0; display: block; transform-style: preserve-3d; }
+.board.v3d .topstar .sp.b { transform: rotateZ(90deg); }
+.board.v3d .topstar i {
+  position: absolute; left: 0; width: 100%; bottom: 50%; height: 100%;
+  display: grid; place-items: end center; transform-origin: 50% 100%; transform: rotateX(-90deg);
+  filter: drop-shadow(0 0 10px #ffd86b) drop-shadow(0 0 3px #fff3c4);
+}
 .wall { position: absolute; pointer-events: none; display: none; }
 .board.v3d .wall { display: block; }
 #rotBox { display: inline-flex; gap: 4px; }

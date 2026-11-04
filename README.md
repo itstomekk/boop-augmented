@@ -10,7 +10,8 @@
 
 - 🌲 **Classic tree**: 4 tiers on a 7×7 board (1, 8, 16 and 20 cells, base corners cut off), 8 kittens and 3 ornaments per player.
 - 🌲🌲 **Big tree**: the same rules on 5 to 8 tiers, up to 15×15 and 221 cells. Kittens on **Auto** scale with the tree: 8 on the classic tree, +2 per extra tier (10, 12, 14, 16). You can also pick a fixed count from 8 to 16.
-- 🧊 **2D or 3D**: play from above, or switch to a 3D view of the stacked tree and rotate it (⟲ ⟳ buttons, Q/E keys, or drag).
+- 🎁 **More ornaments on big trees** (Auto): up to 6 per player, up to 3 hanging at once, hung on the 3rd tier from the bottom so they stay within reach. Capturing 3 still wins. The classic tree keeps the official rule.
+- 🧊 **2D or 3D**: play from above, or switch to a 3D view of the stacked tree. Drag to orbit (sideways turns, up/down tilts), scroll to zoom, or use the ⟲ ⟳ ⤒ ⤓ − + ⌂ buttons. The star on top is a real 3D topper that turns with the tree.
 - 🤖 **Play the computer** (you are white-and-gold **Snowball**, the computer is black-and-red **Coal**) or two players on one device.
 - 💾 Saves in your browser, with undo. No account, no server, no tracking.
 
@@ -33,7 +34,7 @@ The board is a tree seen from above: the centre is the top, each ring outward is
 
 **Win nice:** three cats in a row, or all your pieces on the tree as cats. **Win naughty:** capture 3 of your opponent's ornaments.
 
-Keys: `K` kitten, `C` cat, `U` undo, `Q`/`E` rotate in 3D.
+Keys: `K` kitten, `C` cat, `U` undo; in 3D `Q`/`E` rotate, `W`/`S` tilt, `+`/`-` zoom.
 
 ## ▶️ Run it
 
