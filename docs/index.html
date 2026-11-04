@@ -58,6 +58,7 @@
       <button id="zoomIn" type="button" aria-label="Zoom in">+</button>
       <button id="camReset" type="button" aria-label="Reset view">⌂</button>
     </span>
+    <button id="onlineBtn" type="button">🌐 Play online</button>
     <button id="newGame" type="button">New game</button>
     <button id="undo" type="button">Undo</button>
     <button id="rulesBtn" type="button">Rules</button>
@@ -91,7 +92,14 @@
   <form method="dialog"><button>Let's play!</button></form>
 </dialog>
 
+<dialog id="onlineDlg">
+  <h2>Play online 🌐</h2>
+  <div id="onlineBody"></div>
+  <form method="dialog"><button>Close</button></form>
+</dialog>
+
 <script src="logic.js"></script>
+<script src="online.js"></script>
 <script src="ui.js"></script>
 </body>
 </html>

@@ -13,7 +13,8 @@
 - 🎁 **More ornaments on big trees** (Auto): up to 6 per player, up to 3 hanging at once, hung on the 3rd tier from the bottom so they stay within reach. Capturing 3 still wins. The classic tree keeps the official rule.
 - 🧊 **2D or 3D**: play from above, or switch to a 3D view of the stacked tree. Drag to orbit (sideways turns, up/down tilts), scroll to zoom, or use the ⟲ ⟳ ⤒ ⤓ − + ⌂ buttons. The star on top is a real 3D topper that turns with the tree.
 - 🤖 **Play the computer** (you are white-and-gold **Snowball**, the computer is black-and-red **Coal**) or two players on one device.
-- 💾 Saves in your browser, with undo. No account, no server, no tracking.
+- 🌐 **Play online with a friend**: press **Play online**, create a room and send the link. The first person to open it plays Coal; anyone after that can watch. Moves travel as signed [Nostr](https://nostr.com) events through public relays, so there is no server and no account.
+- 💾 Local games save in your browser, with undo. Online games rebuild themselves from the room's events after a reload. No account, no tracking.
 
 | Classic, from above | Big tree (8 tiers), from above | Big tree in 3D |
 |---|---|---|

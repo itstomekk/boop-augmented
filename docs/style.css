@@ -155,4 +155,7 @@ kbd { background: #ffffff22; border-radius: 4px; padding: 0 5px; }
 .wall { position: absolute; pointer-events: none; display: none; }
 .board.v3d .wall { display: block; }
 #rotBox { display: inline-flex; gap: 4px; }
+.linkrow { display: flex; gap: 6px; }
+.linkrow input { flex: 1; min-width: 0; font: inherit; color: var(--ink); background: #ffffff14; border: 1px solid #ffffff33; border-radius: 10px; padding: 6px 10px; }
+select:disabled { opacity: .45; }
 #rotBox.hidden { display: none; }

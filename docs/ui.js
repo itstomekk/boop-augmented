@@ -26,6 +26,7 @@
   const gameOpts = () => Object.assign({ levels: settings.levels, pieces: piecesFor() }, ornCfg(settings.levels));
   try { Object.assign(settings, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) { /* ignore */ }
   let cpuPlan = null;
+  let net = null, netView = null, netSeq = 0, netPending = false, boardRoom = null; // online room (Nostr)
   let state = null, history = [], selCat = false, busy = false, S = 64, cpuTimer = null, optCur = 0, lastNote = '';
   let geo = null;
   const pieceEls = new Map();
@@ -234,8 +235,8 @@
   }
 
   // ---------- turn flow ----------
-  const isCpu = (p) => settings.mode === 'cpu' && p === CPU_PLAYER;
-  const humanTurn = () => state.phase !== 'over' && !isCpu(state.turn);
+  const isCpu = (p) => !net && settings.mode === 'cpu' && p === CPU_PLAYER;
+  const humanTurn = () => state.phase !== 'over' && (net ? !!netView && netView.myIdx === state.turn : !isCpu(state.turn));
   function effectiveCat() {
     const pl = state.pool[state.turn];
     if (selCat && pl.c > 0) return true;
@@ -283,7 +284,9 @@
     lastNote = notes.join(' ');
   }
 
-  async function act(kind, arg) {
+  const toAction = (kind, arg) => (kind === 'play' ? { k: 'play', i: arg.idx, c: !!arg.cat } : { k: kind, i: arg });
+  async function act(kind, arg, remote) {
+    if (net && !remote) net.sendMove(netSeq, toAction(kind, arg));
     busy = true;
     clearGhost();
     history.push(state);
@@ -318,15 +321,17 @@
 
   function afterAct() {
     optCur = 0;
+    if (net) netSeq++;
     if (state.phase === 'place') {
       const pl = state.pool[state.turn];
       if (selCat && pl.c === 0) selCat = false;
       if (!selCat && pl.k === 0) selCat = true;
     }
-    save();
+    if (!net) save();
     busy = false;
     render();
     scheduleCpu();
+    if (net && netPending) { netPending = false; onNet(netView); }
   }
 
   function onCell(i) {
@@ -366,6 +371,21 @@
   }
 
   // ---------- panels / status ----------
+  function whoLabel(p) {
+    if (!net) return isCpu(p) ? '🤖 Computer' : '🙂 Player';
+    if (!netView || !netView.host) return '🌐 …';
+    if (netView.myIdx === p) return '🙂 You';
+    if (p === 1 && !netView.guest) return '⏳ Waiting for a friend';
+    return '🌐 Friend';
+  }
+  function netBanner() {
+    if (!net) return '';
+    const room = `<b>${net.room}</b>`;
+    if (!netView || !netView.host) return `🌐 Room ${room}: connecting to relays… `;
+    const me = netView.myIdx === null ? 'watching' : `you are ${NAMES[netView.myIdx]}`;
+    const opp = netView.guest ? '' : ' · send the link to a friend';
+    return `🌐 Room ${room} · ${me}${opp}. `;
+  }
   function renderPanel(p) {
     const el = $('panel' + p);
     const pl = state.pool[p];
@@ -378,7 +398,7 @@
     el.classList.toggle('active', active);
     el.innerHTML = `
       <h2><span class="dot"></span>${NAMES[p]}</h2>
-      <div class="who">${isCpu(p) ? '🤖 Computer' : '🙂 Player'}${p === 0 ? ' · starts' : ''}</div>
+      <div class="who">${whoLabel(p)}${p === 0 ? ' · starts' : ''}</div>
       <button type="button" class="pick${active && cat === false ? ' sel' : ''}" data-cat="0" ${canPick && pl.k ? '' : 'disabled'}
         aria-pressed="${active && cat === false}">${catSVG(p, false)}<span class="lbl"><b>${pl.k}</b><small>kittens (K)</small></span></button>
       <button type="button" class="pick${active && cat === true ? ' sel' : ''}" data-cat="1" ${canPick && pl.c ? '' : 'disabled'}
@@ -395,7 +415,7 @@
     for (const i of geo.cells) cellEls[i].classList.remove('allowed', 'opt', 'optCur', 'winline');
     boardEl.querySelector('.tier.decor').classList.toggle('glow', state.phase === 'ornament' && humanTurn());
     const who = `<b class="p${state.turn}">${NAMES[state.turn]}</b>`;
-    const pre = lastNote ? lastNote + ' ' : '';
+    const pre = netBanner() + (lastNote ? lastNote + ' ' : '');
     let msg;
     if (state.phase === 'over') {
       const why = { naughty: 'naughty: 3 ornaments knocked off', 'nice-line': 'nice: three cats in a row', 'nice-all': 'nice: all cats on the tree' }[state.winReason];
@@ -403,6 +423,8 @@
       if (state.winLine) for (const i of state.winLine) cellEls[i].classList.add('winline');
     } else if (isCpu(state.turn)) {
       msg = `${pre}${who} is thinking…`;
+    } else if (net && !humanTurn()) {
+      msg = `${pre}Waiting for ${who}…`;
     } else if (state.phase === 'ornament') {
       msg = `${pre}${who}: hang an ornament on the gold dashed ring (tier ${(state.decor || 1) + 1}).`;
       for (const i of L.ornamentCells(state)) cellEls[i].classList.add('allowed');
@@ -423,7 +445,8 @@
       if (!dis && state.phase === 'ornament') dis = !cellEls[i].classList.contains('allowed');
       cellEls[i].disabled = dis;
     }
-    $('undo').disabled = busy || !history.length;
+    $('undo').disabled = busy || !history.length || !!net;
+    for (const id of ['mode', 'levels', 'pieces', 'ornaments']) $(id).disabled = !!net;
     $('mode').value = settings.mode;
     $('levels').value = String(settings.levels);
     $('pieces').value = String(settings.pieces);
@@ -449,6 +472,7 @@
   function persistSettings() { localStorage.setItem(SET_KEY, JSON.stringify(settings)); }
 
   function newGame() {
+    if (net) leaveOnline(false);
     clearTimeout(cpuTimer);
     state = L.newGame(gameOpts());
     history = []; selCat = false; busy = false; lastNote = ''; optCur = 0;
@@ -456,7 +480,7 @@
     save(); render(); scheduleCpu();
   }
   function undo() {
-    if (busy || !history.length) return;
+    if (busy || !history.length || net) return;
     clearTimeout(cpuTimer);
     state = history.pop();
     while (settings.mode === 'cpu' && isCpu(state.turn) && history.length) state = history.pop();
@@ -517,6 +541,103 @@
     dragging = false; drag0 = null;
   });
 
+  // ---------- online rooms (Nostr) ----------
+  const params = new URLSearchParams(location.search);
+  const relayParam = params.get('relays');
+  let nostrLoad = null;
+  function loadNostr() {
+    if (window.NostrTools) return Promise.resolve();
+    if (!nostrLoad) nostrLoad = new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'vendor/nostr-tools-2.25.5.bundle.js';
+      s.onload = () => res(); s.onerror = () => { nostrLoad = null; rej(new Error('could not load nostr-tools')); };
+      document.head.appendChild(s);
+    });
+    return nostrLoad;
+  }
+  async function ensureClient() {
+    await loadNostr();
+    if (!net) {
+      net = new window.BoopOnline.Client({ NostrTools: window.NostrTools, Logic: L, relays: relayParam ? relayParam.split(',') : null, onChange: onNet });
+    }
+    return net;
+  }
+  function roomLink(room) {
+    const u = new URL(location.href);
+    u.search = ''; u.searchParams.set('room', room);
+    if (relayParam) u.searchParams.set('relays', relayParam);
+    return u.toString();
+  }
+  async function startOnline(room, cfg) {
+    clearTimeout(cpuTimer);
+    const c = await ensureClient();
+    netView = null; netSeq = 0; netPending = false; lastNote = '';
+    if (cfg) room = c.create(cfg); else c.open(room);
+    boardRoom = null;
+    window.history.replaceState(null, '', roomLink(room));
+    renderOnlineDialog();
+    render();
+    return room;
+  }
+  function leaveOnline(reloadLocal) {
+    if (!net) return;
+    net.close();
+    net = null; netView = null;
+    const u = new URL(location.href); u.searchParams.delete('room');
+    boardRoom = null;
+    window.history.replaceState(null, '', u.toString());
+    if (reloadLocal) {
+      if (!load()) state = L.newGame(gameOpts());
+      buildBoard(); render(); scheduleCpu();
+    }
+    renderOnlineDialog();
+  }
+  // Room events changed: replay is the truth. Animate one new move, otherwise jump to the replayed state.
+  function onNet(view) {
+    if (!net) return;
+    netView = view;
+    if (!view.state) { render(); return; }
+    if (busy) { netPending = true; return; }
+    if (boardRoom !== net.room) {                 // first replay of this room: build its board
+      boardRoom = net.room; state = view.state; netSeq = view.seq; lastNote = '';
+      buildBoard(); render(); return;
+    }
+    if (view.seq === netSeq + 1) {                // exactly one new move: animate it
+      const a = view.actions[netSeq];
+      if (a.k === 'play') act('play', { idx: a.i, cat: a.c }, true); else act(a.k, a.i, true);
+      return;
+    }
+    if (view.seq !== netSeq) {                    // anything else: jump to the replayed state
+      state = view.state; netSeq = view.seq; lastNote = '';
+      for (const el of pieceEls.values()) el.remove();
+      pieceEls.clear();
+    }
+    render();
+  }
+  function renderOnlineDialog() {
+    const box = $('onlineBody');
+    if (!box) return;
+    if (net && net.room) {
+      box.innerHTML = `<p>Send this link to your friend. The first person to open it plays <b>Coal</b>; anyone after that can watch.</p>
+        <p class="linkrow"><input id="roomLink" readonly value="${roomLink(net.room)}"><button id="copyLink" type="button">Copy</button></p>
+        <p class="hint">Moves travel as signed Nostr events through public relays (${net.relays.length}). No account needed.</p>
+        <p><button id="leaveRoom" type="button">Leave room</button></p>`;
+      $('copyLink').onclick = async () => { const i = $('roomLink'); i.select(); try { await navigator.clipboard.writeText(i.value); } catch (e) { document.execCommand('copy'); } $('copyLink').textContent = 'Copied ✓'; };
+      $('leaveRoom').onclick = () => { leaveOnline(true); };
+    } else {
+      box.innerHTML = `<p><button id="createRoom" type="button">Create a room</button> <span class="hint">uses the current Tree, Kittens and Ornaments settings. You play Snowball.</span></p>
+        <p class="linkrow"><input id="joinCode" placeholder="Room link or code"><button id="joinRoom" type="button">Join</button></p>`;
+      $('createRoom').onclick = () => startOnline(null, gameOpts()).catch(showNetError);
+      $('joinRoom').onclick = () => {
+        const v = $('joinCode').value.trim();
+        const m = v.match(/room=([a-z0-9]+)/) || v.match(/^([a-z0-9]{6,16})$/);
+        if (m) startOnline(m[1]).catch(showNetError); else $('joinCode').setCustomValidity('Paste a room link or code');
+      };
+    }
+  }
+  function showNetError(e) { statusEl.textContent = '⚠️ Online play is unavailable: ' + e.message; }
+  $('onlineBtn').addEventListener('click', () => { renderOnlineDialog(); $('onlineDlg').showModal(); });
+
   // ---------- wiring ----------
   $('newGame').addEventListener('click', newGame);
   $('undo').addEventListener('click', undo);
@@ -575,12 +696,15 @@
   if (!load()) state = L.newGame(gameOpts());
   buildBoard();
   render();
-  scheduleCpu();
+  const roomParam = params.get('room');
+  if (roomParam && window.BoopOnline && window.BoopOnline.ROOM_RE.test(roomParam)) startOnline(roomParam).catch(showNetError);
+  else scheduleCpu();
   if (!localStorage.getItem(SEEN_KEY)) { localStorage.setItem(SEEN_KEY, '1'); $('rules').showModal(); }
 
   // Test/diagnostic hook.
   window.__boop = {
     get state() { return state; }, get busy() { return busy; }, get settings() { return settings; },
     newGame, undo, rotate, pieceCount: () => pieceEls.size, cellSize: () => S,
+    get net() { return net && { room: net.room, pubkey: net.pubkey, view: netView, seq: netSeq }; },
   };
 })();
