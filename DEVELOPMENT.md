@@ -26,7 +26,9 @@ Simplifications: when a turn offers both a line and the all-on-the-tree graduati
 
 ## 3D view
 
-Pure CSS 3D, no WebGL. The board gets `scale(zoom) rotateX(tilt) rotateZ(spin)` inside a `perspective` wrapper; the cell size is chosen so the board fits at any spin and tilt (diagonal vs tower height). The star is two crossed standing planes on the treetop cell, so it turns with the tree. Each tier's top face sits at `translateZ((L - ring) * 0.42 * cell)`, side walls are rotated divs, and pieces are billboards (`rotateZ(-spin) rotateX(-58deg)`) so they always face the camera. Cells stay real buttons, so clicks and keyboard focus work the same in 2D and 3D.
+Pure CSS 3D, no WebGL. The board gets `scale3d(zoom, zoom, zoom) rotateX(tilt) rotateZ(spin)` inside a `perspective` wrapper; the cell size is chosen so the board fits at any spin and tilt (diagonal vs tower height). Each tier's top face sits at `translateZ((L - ring) * 0.42 * cell)`, side walls are rotated divs, and pieces are billboards (`rotateZ(-spin) rotateX(-tilt)`) so they always face the camera. Cells stay real buttons, so clicks and keyboard focus work the same in 2D and 3D.
+
+The camera now uses uniform `scale3d(zoom, zoom, zoom)`: unlike CSS `scale()`, it scales Z too. The sky reads the tree wrapper's computed CSS perspective (currently 1900px) and perspective-origin (currently 50% 35%), converts that origin to viewport coordinates, and projects seeded world directions with the same `Rx(tilt) Rz(spin)` orientation. Uniform scaling cancels for points at infinity, so zoom leaves distant stars fixed. Resize, scroll, board rebuilds and camera input repaint the sky. `test/sky_camera_test.py` checks recorded canvas positions against both analytical CSS intrinsics and actual CSS-transformed far-world points in Firefox and Chromium, including mobile portrait/landscape and zoom extremes.
 
 ## Kitten count on bigger trees
 
@@ -34,9 +36,12 @@ Pure CSS 3D, no WebGL. The board gets `scale(zoom) rotateX(tilt) rotateZ(spin)` 
 
 ## Online rooms
 
-- Room = random 8-character id, link `?room=<id>`. Events: kind 8812 (regular, so relays store them), tag `["t","boop-augmented-<id>"]`, JSON content with `v: 1`.
-- `create {cfg}` by the host (Snowball), `join` by the first other key (Coal), `move {seq, a}` with `a = {k: orn|play|line|promote, i, c}`.
-- Every client replays the whole room with `logic.js`. A move counts only with the next `seq`, from the player whose turn it is, and only if it is legal; for one `seq` the earliest valid event wins. Relays carry data and cannot cheat for a player.
+- V2 invitation: `?room=b2.<random-8-character-nonce>.<host-pubkey-hex>.<signed-create-event-id-hex>`. Both hex identifiers must have exactly 64 lowercase characters. The relay tag is `["t","boop-augmented-<nonce>"]`, kind 8812, JSON `v: 2`. Replay requires the full invitation and only accepts its exact create ID, host and room tag. Browser delivery explicitly verifies signatures; the pure replay helper expects already verified events.
+- `create {cfg}` by the host (Snowball). All later events include `root: <create-event-id>`. `join` requests a seat; only a host-signed `admit {join:<request-id>, guest:<request-pubkey>}` grants Coal. The host waits for initial history EOSE, then auto-admits a pending request if no admission exists. With multiple pending requests at that decision, timestamp/ID order breaks ties. Later outsider requests cannot replace an admitted guest. A host must be online for initial admission, not for an already admitted guest to resume.
+- Compatibility intentionally fails closed. Legacy nonce-only codes and v1 histories cannot establish a trustworthy host/create binding and are not auto-upgraded, replayed or joined. The UI explains that the host must create a new room and send its full invitation. All participants must use the v2 client. Local saves and browser identity keys retain their existing storage formats.
+- `move {seq, a}` uses `a = {k: orn|play|line|promote, i}` with an additional boolean `c` required only for `play`. Sequence/index values must be nonnegative safe integers, indices must be in range, and unknown action fields are rejected. Replay retains canonical actions and accepted event IDs, never coerced originals. Rules still decide legality and turn authority; for competing moves at one sequence, timestamp then ID determines the canonical event.
+- UI animation requires an exact accepted-event prefix plus one new action, not just a larger sequence. Equal-length forks, changed admission identity, shortened histories, and multi-action updates replace the board atomically from replay. Pending updates drain after animation; action/application exceptions restore replay (or the previous local state) and release busy in `finally`.
+- Security boundary: this prevents the reported outsider backdated-create/admission takeover when the authentic invitation is used. It does not authenticate who sent an invitation, reserve the open guest seat for a particular friend, protect a compromised host/browser key, stop an authorized player or host from signing conflicting moves/admissions, guarantee relay history completeness or availability, encrypt public events, or bound event-flood resources. Conflicting host admissions are deterministically ordered, not consensus-final. Do not claim general protection against malicious hosts or relays.
 - Keys: one throwaway key per browser (`boop-augmented-nostr-key-v1` in localStorage); no login. Relays: damus, nos.lol, primal, snort; `?relays=wss://a,wss://b` overrides them (tests use a fake relay).
 - Measured on real relays: room created in about 4 s, guest seated about 1 s later, a move delivered in 0.4 s.
 - Not yet: rematch in the same room, chat, NIP-07 login, a public lobby.
@@ -51,5 +56,7 @@ Every full turn (ornament cell x placement, with line choice and promotion auto-
 node test/logic.test.js       # rule checks + CPU self-play timing
 node test/online.test.js      # room replay checks
 python test/online_browser_test.py   # two browsers + spectator over a fake relay
+python test/online_regression_test.py # signed F1-F3 adversarial cases in Firefox and Chromium
+python test/sky_camera_test.py # image checks + CSS world-ray registration in both engines
 python test/browser_test.py   # Firefox, desktop + mobile, 2D + 3D clicks, screenshots
 ```

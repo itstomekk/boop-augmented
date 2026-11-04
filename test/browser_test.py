@@ -82,15 +82,24 @@ try:
             ok(b[37] and b[37]["p"] == 1 and b[39] and b[39]["p"] == 0, f"{name}: 3D click places and boops")
             # Board fits its frame, the star is centred on the treetop and turns with the tree
             def star_offset():
-                sb = pg.locator(".topstar .sp.a i").bounding_box(); cb = pg.locator('.cell[data-idx="24"]').bounding_box()
+                sb = pg.locator(".topstar .orb").bounding_box(); cb = pg.locator('.cell[data-idx="24"]').bounding_box()
                 return abs((sb["x"] + sb["width"] / 2) - (cb["x"] + cb["width"] / 2))
-            ok(pg.locator(".topstar .sp").count() == 2, f"{name}: 3D star is two crossed planes")
+            ok(pg.locator(".topstar .orb").count() == 1 and pg.locator(".topstar .sp").count() == 0, f"{name}: glowing sphere replaces crossed stars")
+            ok(pg.locator('.tier:not(.base)').first.evaluate("e => getComputedStyle(e).clipPath.startsWith('polygon')"), f"{name}: tier corners are cut")
+            ok(pg.locator('.topstar .orb').evaluate("e => getComputedStyle(e).transform !== 'none'"), f"{name}: orb raised above treetop")
             for k in range(3):
                 pg.click("#rotR"); pg.wait_for_timeout(550)
                 ok(star_offset() < pg.evaluate("__boop.cellSize()") * 0.35, f"{name}: star centred over treetop after rotation {k+1} ({star_offset():.1f}px)")
             pg.click("#tiltDown"); pg.click("#zoomIn"); pg.wait_for_timeout(500)
             cam = pg.evaluate("[__boop.settings.tilt, __boop.settings.zoom]")
             ok(cam[0] == 70 and abs(cam[1] - 1.2) < 1e-9, f"{name}: tilt and zoom buttons ({cam})")
+            pg.click("#camReset"); pg.wait_for_timeout(500)
+            box = pg.locator('#boardWrap').bounding_box()
+            x, y = box['x'] + box['width'] / 2, box['y'] + box['height'] / 2
+            before = pg.evaluate('[__boop.settings.spin, __boop.settings.tilt]')
+            pg.mouse.move(x, y); pg.mouse.down(); pg.mouse.move(x + 40, y + 30, steps=5); pg.mouse.up()
+            after = pg.evaluate('[__boop.settings.spin, __boop.settings.tilt]')
+            ok(after[0] < before[0] and after[1] < before[1], f"{name}: right/down drag follows corrected direction")
             pg.click("#camReset"); pg.wait_for_timeout(500)
             wb = pg.locator("#boardWrap").bounding_box(); bb = pg.locator("#board").bounding_box()
             ok(bb["y"] >= wb["y"] - 4 and bb["y"] + bb["height"] <= wb["y"] + wb["height"] + 4 and bb["x"] >= -2 and bb["x"] + bb["width"] <= vp["width"] + 2,

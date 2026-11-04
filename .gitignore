@@ -14,3 +14,7 @@
 !/test/balance_sim.js
 !/test/online.test.js
 !/test/online_browser_test.py
+!/test/boop_motion_test.py
+!/test/sky_camera_test.py
+!/test/ai_worker_test.py
+!/test/online_regression_test.py

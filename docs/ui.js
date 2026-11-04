@@ -25,8 +25,10 @@
     : { ornaments: Math.min(6, levels - 1), ornActive: 1 + Math.floor((levels - 3) / 2), decor: levels - 3 });
   const gameOpts = () => Object.assign({ levels: settings.levels, pieces: piecesFor() }, ornCfg(settings.levels));
   try { Object.assign(settings, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) { /* ignore */ }
-  let cpuPlan = null;
-  let net = null, netView = null, netSeq = 0, netPending = false, boardRoom = null; // online room (Nostr)
+  let cpuPlan = null, cpuWorker = null, cpuGeneration = 0, cpuWatchdog = null;
+  let net = null, netView = null, netSeq = 0, netIds = [], netPending = false, boardRoom = null; // online room (Nostr)
+  const replayIdentity = (v) => `${v.root}:${v.admission || ''}`;
+  let boardReplay = null;
   let state = null, history = [], selCat = false, busy = false, S = 64, cpuTimer = null, optCur = 0, lastNote = '';
   let geo = null;
   const pieceEls = new Map();
@@ -71,9 +73,50 @@
   const zRing = (k) => (is3d() ? (geo.L - k) * H() : 0);
   const zOf = (r, c) => (L.onBoard(geo, r, c) ? zRing(geo.ring[r * geo.N + c]) : 0);
   const billboard = () => `rotateZ(${-settings.spin}deg) rotateX(${-settings.tilt}deg)`;
-  const camTransform = () => `scale(${settings.zoom}) rotateX(${settings.tilt}deg) rotateZ(${settings.spin}deg)`;
+  const camTransform = () => `scale3d(${settings.zoom}, ${settings.zoom}, ${settings.zoom}) rotateX(${settings.tilt}deg) rotateZ(${settings.spin}deg)`;
   // Tree-topper: a standing 3D star centred on the treetop cell, lifted a little above it.
   const starTransform = () => `translateZ(${zRing(0) + S * 0.25}px)`;
+
+  // Fixed stars on a celestial sphere. Apply the same Rx(tilt) Rz(spin)
+  // as the tree, then perspective-project directions behind the camera.
+  // The finite star list is generated once, not on every animation frame.
+  const skyCanvas = $('sky'), skyCtx = skyCanvas.getContext('2d');
+  let seed = 674213;
+  const rand = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
+  const stars = Array.from({ length: 1400 }, () => {
+    const z = rand() * 2 - 1, a = rand() * Math.PI * 2, r = Math.sqrt(1 - z * z);
+    return { x: r * Math.cos(a), y: r * Math.sin(a), z, size: .6 + Math.pow(rand(), 4) * 2.4, alpha: .3 + rand() * .7 };
+  });
+  function updateSky() {
+    const w = window.innerWidth, h = window.innerHeight;
+    // One physical pixel per CSS pixel: no giant high-DPI phone buffers.
+    if (skyCanvas.width !== w || skyCanvas.height !== h) { skyCanvas.width = w; skyCanvas.height = h; }
+    // Read the tree's actual CSS camera intrinsics, including its viewport-space origin.
+    // At infinity uniform board zoom cancels out of x/-z and y/-z.
+    const camera = getComputedStyle(wrapEl), rect = wrapEl.getBoundingClientRect();
+    const origin = camera.perspectiveOrigin.split(' ').map(parseFloat);
+    const f = is3d() ? parseFloat(camera.perspective) : Math.max(w, h) * .8;
+    const ox = is3d() ? rect.left + origin[0] : w / 2;
+    const oy = is3d() ? rect.top + origin[1] : h / 2;
+    const cx = skyCtx;
+    cx.fillStyle = '#0b1630'; cx.fillRect(0, 0, w, h);
+    const grad = cx.createRadialGradient(w * .5, h * .4, 0, w * .5, h * .4, Math.max(w, h));
+    grad.addColorStop(0, '#1a315b'); grad.addColorStop(1, '#080f23');
+    cx.fillStyle = grad; cx.fillRect(0, 0, w, h);
+    const spin = (is3d() ? settings.spin : 0) * Math.PI / 180;
+    const tilt = (is3d() ? settings.tilt : 0) * Math.PI / 180;
+    const cs = Math.cos(spin), ss = Math.sin(spin), ct = Math.cos(tilt), st = Math.sin(tilt);
+    for (const s of stars) {
+      const x = cs * s.x - ss * s.y, y = ss * s.x + cs * s.y;
+      const sy = ct * y - st * s.z, sz = st * y + ct * s.z;
+      if (sz >= -.05) continue;
+      const px = ox + f * x / -sz, py = oy + f * sy / -sz;
+      if (px < -4 || px > w + 4 || py < -4 || py > h + 4) continue;
+      cx.globalAlpha = s.alpha; cx.fillStyle = '#e5efff';
+      cx.beginPath(); cx.arc(px, py, s.size, 0, Math.PI * 2); cx.fill();
+    }
+    cx.globalAlpha = 1;
+  }
 
   // ---------- layout ----------
   function measure() {
@@ -88,6 +131,7 @@
     document.documentElement.style.setProperty('--S', S + 'px');
     const W = N * S;
     wrapEl.classList.toggle('v3d', is3d());
+    $('snow').style.display = is3d() ? 'none' : '';
     boardEl.classList.toggle('v3d', is3d());
     wrapEl.style.height = is3d() ? Math.round(S * Math.hypot(D, T) + 24) + 'px' : '';
     boardEl.style.width = W + 'px';
@@ -103,6 +147,7 @@
     const star = boardEl.querySelector('.topstar');
     Object.assign(star.style, { left: geo.m * S + 'px', top: geo.m * S + 'px', width: S + 'px', height: S + 'px' });
     star.style.transform = is3d() ? starTransform() : '';
+
     for (const i of geo.cells) {
       const el = cellEls[i];
       el.style.left = (i % N) * S + 'px';
@@ -111,12 +156,19 @@
     }
     placeAll();
     $('rotBox').classList.toggle('hidden', !is3d());
+    updateSky();
   }
   function placeAll() {
     for (const el of pieceEls.values()) placeEl(el, el._r, el._c);
     if (ghostEl) placeEl(ghostEl, ghostEl._r, ghostEl._c);
   }
   function placeEl(el, r, c) {
+    // Lighting depends on cell and view, not camera angle; don't recompute it on orbit.
+    if (el._r !== r || el._c !== c || el._lit3d !== is3d()) {
+      const light = is3d() ? Math.max(0, 1 - Math.hypot(r - geo.m, c - geo.m) / (geo.L * 1.25)) : 0;
+      el.style.filter = light ? `brightness(${1 + light * 0.22}) drop-shadow(0 0 ${light * 5}px #ffd86b99)` : '';
+      el._lit3d = is3d();
+    }
     el._r = r; el._c = c;
     if (is3d()) {
       const lift = el.classList.contains('orn') ? -30 : -36;
@@ -169,7 +221,7 @@
       boardEl.appendChild(t);
     }
     const star = document.createElement('div');
-    star.className = 'topstar'; star.innerHTML = '<span class="sp a"><i>⭐</i></span><span class="sp b"><i>⭐</i></span>';
+    star.className = 'topstar'; star.innerHTML = '<span class="orb">' + Array.from({length: 12}, (_, i) => `<i style="transform:rotateY(${i * 15}deg)"></i>`).join('') + '</span>';
     star.title = 'Treetop: the single cell of tier 1';
     boardEl.appendChild(star);
     for (const i of geo.cells) {
@@ -253,21 +305,30 @@
     makePiece({ id: res.placed.id, p: res.placed.p, kind: res.placed.kind }, res.placed.idx);
     await wait(140);
     const notes = [];
+    const motions = [];
     for (const bp of res.boops) {
       const el = pieceEls.get(bp.id);
       if (!el) continue;
+      const from = el.style.transform;
+      const off = bp.result === 'off' || bp.result === 'returned' || bp.result === 'captured' || bp.result === 'pounce';
+      el.style.transition = 'none';
       placeEl(el, bp.tr, bp.tc);
-      if (bp.result === 'off' || bp.result === 'returned' || bp.result === 'captured') el.classList.add('gone');
+      if (!reduced) {
+        const frames = off
+          ? [{ transform: from, opacity: 1, offset: 0 }, { opacity: 1, offset: 0.65 }, { transform: el.style.transform, opacity: 0, offset: 1 }]
+          : [{ transform: from }, { transform: el.style.transform }];
+        const anim = el.animate(frames, { duration: 560, easing: 'cubic-bezier(.2,.7,.3,1)', fill: 'both' });
+        motions.push(anim.finished.catch(() => {}).then(() => { if (off) el.classList.add('gone'); anim.cancel(); el.style.transition = ''; }));
+      } else { if (off) el.classList.add('gone'); el.style.transition = ''; }
       if (bp.result === 'captured') notes.push(`💥 ${NAMES[bp.by]} knocks off an ornament!`);
       if (bp.result === 'returned') notes.push(`${NAMES[bp.owner]} gets their ornament back.`);
       if (bp.result === 'pounce') {
-        el.classList.add('gone');
         const oe = pieceEls.get(bp.ornId);
         if (oe) { oe.classList.add('flash'); setTimeout(() => oe.classList.add('gone'), reduced ? 0 : 200); }
         notes.push(bp.ornResult === 'captured' ? `🐾 Pounce! ${NAMES[bp.by]} captures an ornament.` : `🐾 ${NAMES[bp.by]} rescues their own ornament.`);
       }
     }
-    if (res.boops.length) await wait(360);
+    if (motions.length) await Promise.all(motions);
     // Pieces removed by graduation = still on the tree after boops, gone in the result.
     const finalIds = idsOn(res.state);
     const gradIds = [];
@@ -286,42 +347,69 @@
 
   const toAction = (kind, arg) => (kind === 'play' ? { k: 'play', i: arg.idx, c: !!arg.cat } : { k: kind, i: arg });
   async function act(kind, arg, remote) {
-    if (net && !remote) net.sendMove(netSeq, toAction(kind, arg));
+    const prev = state, historyLength = history.length;
+    let sent = null, completed = false;
     busy = true;
-    clearGhost();
-    history.push(state);
-    const prev = state;
-    if (kind === 'orn') {
-      const res = L.placeOrnament(state, arg);
-      makePiece({ id: res.placed.id, p: res.placed.p, kind: 'o' }, arg);
-      await wait(260);
-      state = res.state;
-      lastNote = '';
-    } else if (kind === 'play') {
-      const res = L.play(state, arg.idx, arg.cat);
-      await animatePlay(prev, res);
-      state = res.state;
-    } else if (kind === 'line') {
-      const res = L.chooseLine(state, arg);
-      for (const id of res.ids) pieceEls.get(id).classList.add('grad');
-      await wait(450);
-      for (const id of res.ids) pieceEls.get(id).classList.add('gone');
-      await wait(260);
-      state = res.state;
-      lastNote = `✨ ${NAMES[prev.turn]} graduates: 3 cats to the pool.`;
-    } else if (kind === 'promote') {
-      const res = L.promote(state, arg);
-      const el = pieceEls.get(res.removed.id);
-      if (el) { el.classList.add('grad'); await wait(320); el.classList.add('gone'); await wait(240); }
-      state = res.state;
-      lastNote = `✨ ${NAMES[prev.turn]} takes a piece back as a cat.`;
+    try {
+      // Validate before publishing. Never send a locally illegal action to the relay.
+      if (net && !remote) {
+        window.BoopOnline.applyAction(L, state, toAction(kind, arg));
+        sent = net.sendMove(netSeq, toAction(kind, arg));
+      }
+      clearGhost();
+      render();
+      history.push(state);
+      if (kind === 'orn') {
+        const res = L.placeOrnament(state, arg);
+        makePiece({ id: res.placed.id, p: res.placed.p, kind: 'o' }, arg);
+        await wait(260);
+        state = res.state;
+        lastNote = '';
+      } else if (kind === 'play') {
+        const res = L.play(state, arg.idx, arg.cat);
+        await animatePlay(prev, res);
+        state = res.state;
+      } else if (kind === 'line') {
+        const res = L.chooseLine(state, arg);
+        for (const id of res.ids) pieceEls.get(id).classList.add('grad');
+        await wait(450);
+        for (const id of res.ids) pieceEls.get(id).classList.add('gone');
+        await wait(260);
+        state = res.state;
+        lastNote = `✨ ${NAMES[prev.turn]} graduates: 3 cats to the pool.`;
+      } else if (kind === 'promote') {
+        const res = L.promote(state, arg);
+        const el = pieceEls.get(res.removed.id);
+        if (el) { el.classList.add('grad'); await wait(320); el.classList.add('gone'); await wait(240); }
+        state = res.state;
+        lastNote = `✨ ${NAMES[prev.turn]} takes a piece back as a cat.`;
+      } else throw new Error('Unknown action');
+      if (net) netIds = remote ? remote.actionIds.slice() : netIds.concat(sent.id);
+      completed = true;
+    } catch (error) {
+      console.error('Action failed; restoring canonical state', error);
+      history.length = historyLength;
+      clearGhost();
+      if (net) {
+        const latest = net.view();
+        netView = latest;
+        if (latest.state) replaceReplay(latest);
+        else { state = prev; buildBoard(); }
+      } else { state = prev; buildBoard(); }
+      lastNote = 'The move animation failed; the board has been restored.';
+    } finally {
+      busy = false;
+      if (completed) afterAct();
+      else {
+        render();
+        if (net && netPending) { netPending = false; onNet(netView); }
+      }
     }
-    afterAct();
   }
 
   function afterAct() {
     optCur = 0;
-    if (net) netSeq++;
+    if (net) netSeq = netIds.length;
     if (state.phase === 'place') {
       const pl = state.pool[state.turn];
       if (selCat && pl.c === 0) selCat = false;
@@ -351,22 +439,58 @@
     if (cat !== null) act('play', { idx: i, cat });
   }
 
+  function cancelCpu() {
+    ++cpuGeneration;
+    clearTimeout(cpuTimer); clearTimeout(cpuWatchdog);
+    if (cpuWorker) cpuWorker.terminate();
+    cpuWorker = null; cpuPlan = null;
+  }
   function scheduleCpu() {
     clearTimeout(cpuTimer);
     if (state.phase === 'over' || !isCpu(state.turn)) return;
+    const generation = ++cpuGeneration, searchedState = state;
     busy = true;
     render();
-    cpuTimer = setTimeout(() => {
-      // Reuse the placement planned together with the ornament, if it is still legal.
-      let m = cpuPlan && state.phase === 'place' && !state.b[cpuPlan.idx] && state.pool[state.turn][cpuPlan.cat ? 'c' : 'k'] > 0 ? cpuPlan : null;
-      cpuPlan = null;
-      if (!m) m = L.bestMove(state);
-      busy = false;
+    const current = () => generation === cpuGeneration && state === searchedState && isCpu(state.turn);
+    const finish = (m) => {
+      if (!current()) return;
+      clearTimeout(cpuWatchdog);
+      if (cpuWorker) cpuWorker.terminate();
+      cpuWorker = null; busy = false;
       if (!m) { render(); return; }
       if (m.line !== undefined) return act('line', m.line);
       if (m.promote !== undefined) return act('promote', m.promote);
       if (m.orn !== null && m.orn !== undefined && state.phase === 'ornament') { cpuPlan = { idx: m.idx, cat: m.cat }; return act('orn', m.orn); }
       act('play', { idx: m.idx, cat: m.cat });
+    };
+    const fallback = () => {
+      if (!current()) return;
+      clearTimeout(cpuWatchdog);
+      if (cpuWorker) cpuWorker.terminate();
+      cpuWorker = null;
+      // Keep the game playable even where workers are blocked or fail to load.
+      setTimeout(() => {
+        if (!current()) return;
+        try { finish(L.bestMove(searchedState)); }
+        catch (error) { busy = false; render(); console.error('CPU search failed', error); }
+      }, 0);
+    };
+    cpuTimer = setTimeout(() => {
+      if (!current()) return;
+      const m = cpuPlan && state.phase === 'place' && !state.b[cpuPlan.idx] && state.pool[state.turn][cpuPlan.cat ? 'c' : 'k'] > 0 ? cpuPlan : null;
+      cpuPlan = null;
+      if (m) return finish(m);
+      try {
+        cpuWorker = new Worker('ai-worker.js');
+        cpuWorker.onmessage = (event) => {
+          if (!current() || event.data.id !== generation) return;
+          if (event.data.error) fallback(); else finish(event.data.move);
+        };
+        cpuWorker.onerror = (event) => { event.preventDefault(); fallback(); };
+        cpuWorker.onmessageerror = fallback;
+        cpuWatchdog = setTimeout(fallback, 15000);
+        cpuWorker.postMessage({ id: generation, state: searchedState });
+      } catch (error) { fallback(); }
     }, reduced ? 30 : 520);
   }
 
@@ -446,13 +570,16 @@
       cellEls[i].disabled = dis;
     }
     $('undo').disabled = busy || !history.length || !!net;
-    for (const id of ['mode', 'levels', 'pieces', 'ornaments']) $(id).disabled = !!net;
+    $('newGame').disabled = busy;
+    for (const id of ['mode', 'levels', 'pieces', 'ornaments']) $(id).disabled = busy || !!net;
+    for (const id of ['view', 'onlineBtn', 'rotL', 'rotR', 'tiltUp', 'tiltDown', 'zoomIn', 'zoomOut', 'camReset']) $(id).disabled = busy;
     $('mode').value = settings.mode;
     $('levels').value = String(settings.levels);
     $('pieces').value = String(settings.pieces);
     $('pieces').options[0].textContent = `Auto (${autoPieces(settings.levels)})`;
     $('view').value = settings.view;
     $('ornaments').value = settings.ornaments;
+    updateSky();
   }
 
   // ---------- save ----------
@@ -473,7 +600,7 @@
 
   function newGame() {
     if (net) leaveOnline(false);
-    clearTimeout(cpuTimer);
+    cancelCpu();
     state = L.newGame(gameOpts());
     history = []; selCat = false; busy = false; lastNote = ''; optCur = 0;
     buildBoard();
@@ -481,7 +608,7 @@
   }
   function undo() {
     if (busy || !history.length || net) return;
-    clearTimeout(cpuTimer);
+    cancelCpu();
     state = history.pop();
     while (settings.mode === 'cpu' && isCpu(state.turn) && history.length) state = history.pop();
     for (const el of pieceEls.values()) el.remove();
@@ -502,13 +629,14 @@
   function applyCamera() {
     if (!is3d()) return;
     boardEl.style.transform = camTransform();
+    updateSky();
     placeAll();
   }
 
   // ---------- 3D drag-to-rotate ----------
   let dragging = false, suppressClick = false, drag0 = null;
   wrapEl.addEventListener('pointerdown', (e) => {
-    if (!is3d() || e.button !== 0) return;
+    if (busy || !is3d() || e.button !== 0) return;
     drag0 = { x: e.clientX, y: e.clientY, spin: settings.spin, tilt: settings.tilt };
   });
   window.addEventListener('pointermove', (e) => {
@@ -516,15 +644,16 @@
     const dx = e.clientX - drag0.x, dy = e.clientY - drag0.y;
     if (!dragging && Math.abs(dx) + Math.abs(dy) > 6) { dragging = true; clearGhost(); wrapEl.classList.add('dragging'); boardEl.style.transition = 'none'; }
     if (dragging) {
-      settings.spin = drag0.spin + dx * 0.4;
-      settings.tilt = clamp(drag0.tilt + dy * 0.3, 0, 84);
+      settings.spin = drag0.spin - dx * 0.4;
+      settings.tilt = clamp(drag0.tilt - dy * 0.3, 0, 84);
       for (const el of pieceEls.values()) el.style.transition = 'none';
       boardEl.style.transform = camTransform();
+      updateSky();
       placeAll();
     }
   });
   wrapEl.addEventListener('wheel', (e) => {
-    if (!is3d()) return;
+    if (busy || !is3d()) return;
     e.preventDefault();
     setZoom(settings.zoom * Math.exp(-e.deltaY * 0.0015));
   }, { passive: false });
@@ -569,9 +698,11 @@
     return u.toString();
   }
   async function startOnline(room, cfg) {
-    clearTimeout(cpuTimer);
+    if (!cfg) window.BoopOnline.invitation(room);
+    cancelCpu();
+    busy = false;
     const c = await ensureClient();
-    netView = null; netSeq = 0; netPending = false; lastNote = '';
+    netView = null; netSeq = 0; netIds = []; netPending = false; lastNote = '';
     if (cfg) room = c.create(cfg); else c.open(room);
     boardRoom = null;
     window.history.replaceState(null, '', roomLink(room));
@@ -584,6 +715,7 @@
     net.close();
     net = null; netView = null;
     const u = new URL(location.href); u.searchParams.delete('room');
+    netIds = []; netSeq = 0; boardReplay = null; netPending = false;
     boardRoom = null;
     window.history.replaceState(null, '', u.toString());
     if (reloadLocal) {
@@ -593,32 +725,33 @@
     renderOnlineDialog();
   }
   // Room events changed: replay is the truth. Animate one new move, otherwise jump to the replayed state.
+  function replaceReplay(view) {
+    boardRoom = net.room; boardReplay = replayIdentity(view);
+    state = view.state; netSeq = view.seq; netIds = view.actionIds.slice(); lastNote = '';
+    history = []; clearGhost(); buildBoard();
+  }
   function onNet(view) {
     if (!net) return;
     netView = view;
-    if (!view.state) { render(); return; }
     if (busy) { netPending = true; return; }
-    if (boardRoom !== net.room) {                 // first replay of this room: build its board
-      boardRoom = net.room; state = view.state; netSeq = view.seq; lastNote = '';
-      buildBoard(); render(); return;
+    if (!view.state) { render(); return; }
+    if (boardRoom !== net.room || boardReplay !== replayIdentity(view)) {
+      replaceReplay(view); render(); return;
     }
-    if (view.seq === netSeq + 1) {                // exactly one new move: animate it
+    const samePrefix = netIds.every((id, i) => view.actionIds[i] === id);
+    if (samePrefix && view.seq === netSeq + 1) {  // only append to the exact accepted prefix
       const a = view.actions[netSeq];
-      if (a.k === 'play') act('play', { idx: a.i, cat: a.c }, true); else act(a.k, a.i, true);
+      if (a.k === 'play') act('play', { idx: a.i, cat: a.c }, view); else act(a.k, a.i, view);
       return;
     }
-    if (view.seq !== netSeq) {                    // anything else: jump to the replayed state
-      state = view.state; netSeq = view.seq; lastNote = '';
-      for (const el of pieceEls.values()) el.remove();
-      pieceEls.clear();
-    }
+    if (!samePrefix || view.seq !== netSeq) replaceReplay(view);
     render();
   }
   function renderOnlineDialog() {
     const box = $('onlineBody');
     if (!box) return;
     if (net && net.room) {
-      box.innerHTML = `<p>Send this link to your friend. The first person to open it plays <b>Coal</b>; anyone after that can watch.</p>
+      box.innerHTML = `<p>Send this full invitation to your friend. The host admits the first received join request as <b>Coal</b>; anyone after that can watch. The host must be online to admit a new player.</p>
         <p class="linkrow"><input id="roomLink" readonly value="${roomLink(net.room)}"><button id="copyLink" type="button">Copy</button></p>
         <p class="hint">Moves travel as signed Nostr events through public relays (${net.relays.length}). No account needed.</p>
         <p><button id="leaveRoom" type="button">Leave room</button></p>`;
@@ -630,8 +763,9 @@
       $('createRoom').onclick = () => startOnline(null, gameOpts()).catch(showNetError);
       $('joinRoom').onclick = () => {
         const v = $('joinCode').value.trim();
-        const m = v.match(/room=([a-z0-9]+)/) || v.match(/^([a-z0-9]{6,16})$/);
-        if (m) startOnline(m[1]).catch(showNetError); else $('joinCode').setCustomValidity('Paste a room link or code');
+        let room = v;
+        try { room = new URL(v).searchParams.get('room') || ''; } catch (e) { /* full invitation code */ }
+        startOnline(room).catch(showNetError);
       };
     }
   }
@@ -655,7 +789,7 @@
   $('ornaments').addEventListener('change', (e) => { settings.ornaments = e.target.value; persistSettings(); newGame(); });
   $('view').addEventListener('change', (e) => { settings.view = e.target.value; persistSettings(); measure(); });
   document.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'SELECT' || $('rules').open) return;
+    if (busy || e.target.tagName === 'SELECT' || $('rules').open) return;
     const k = e.key.toLowerCase();
     if (k === 'k') { selCat = false; render(); }
     else if (k === 'c') { selCat = true; render(); }
@@ -668,6 +802,8 @@
     else if (k === 'e' && is3d()) rotate(45);
   });
   window.addEventListener('resize', () => geo && measure());
+  window.addEventListener('scroll', updateSky, { passive: true });
+  new ResizeObserver(() => geo && updateSky()).observe(wrapEl);
 
   // ---------- snow ----------
   (function snow() {
@@ -680,7 +816,11 @@
       }));
     }
     size(); addEventListener('resize', size);
-    function tick() {
+    let last = 0;
+    function tick(now = 0) {
+      if (is3d()) { if (!reduced) requestAnimationFrame(tick); return; }
+      if (!reduced && now - last < 33) { requestAnimationFrame(tick); return; }
+      last = now;
       cx.clearRect(0, 0, cv.width, cv.height);
       cx.fillStyle = '#ffffffa0';
       for (const f of flakes) {
@@ -697,7 +837,7 @@
   buildBoard();
   render();
   const roomParam = params.get('room');
-  if (roomParam && window.BoopOnline && window.BoopOnline.ROOM_RE.test(roomParam)) startOnline(roomParam).catch(showNetError);
+  if (roomParam && window.BoopOnline) startOnline(roomParam).catch(showNetError);
   else scheduleCpu();
   if (!localStorage.getItem(SEEN_KEY)) { localStorage.setItem(SEEN_KEY, '1'); $('rules').showModal(); }
 

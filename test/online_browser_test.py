@@ -123,7 +123,7 @@ try:
         B.screenshot(path=str(ROOT / "test" / "screens" / "online-guest.png"), full_page=True)
         ok(not relay.real_attempts, f"no real relay contacted {relay.real_attempts}")
         ok(not (ea + eb + ec), f"no page errors {ea + eb + ec}")
-        ok(len(relay.events) == 1 + 1 + 5, f"relay holds create + join + 5 moves ({len(relay.events)})")
+        ok(len(relay.events) == 1 + 1 + 1 + 5, f"relay holds create + join + admission + 5 moves ({len(relay.events)})")
         br.close()
 finally:
     srv.kill()
