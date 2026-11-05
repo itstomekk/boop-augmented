@@ -18,3 +18,17 @@
 !/test/sky_camera_test.py
 !/test/ai_worker_test.py
 !/test/online_regression_test.py
+!/test/multiplayer.test.js
+!/test/multiplayer_browser_test.py
+!/test/online_multi.test.js
+!/test/online_multi_browser_test.py
+!/test/fixtures/
+!/test/square_ghost.test.js
+!/test/square_ghost_browser_test.py
+!/test/online_square_ghost.test.js
+!/test/online_square_ghost_browser_test.py
+!/test/boopmas.test.js
+!/test/shuffle.test.js
+!/test/online_powers.test.js
+!/test/powers_browser_test.py
+!/test/online_powers_browser_test.py

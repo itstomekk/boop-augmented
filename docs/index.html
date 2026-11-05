@@ -3,23 +3,37 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Boop Augmented 🎄</title>
-<meta name="description" content="A browser take on boop the Halls!: a Christmas tree seen from above (or in 3D), ornaments to knock off, kittens and cats. Classic 4-tier tree or a Big tree with up to 8 tiers.">
+<title>Boop Augmented</title>
+<meta name="description" content="A browser take on boop: the classic square board (6x6 up to 10x10, optional ghost cats), a Shuffle-style board with wild, super and scaredy pieces, or the Christmas tree of boop the Halls! with ornaments and optional Boopmas spirits, 2D or 3D, for 2 to 4 players, offline or online.">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <canvas id="sky" aria-hidden="true"></canvas>
 <canvas id="snow" aria-hidden="true"></canvas>
 <header class="top">
-  <h1>Boop <span>Augmented</span> 🎄</h1>
+  <h1>Boop <span>Augmented</span> <span id="logoEmoji" class="emoji">🎄</span></h1>
   <div class="controls">
     <label>Mode
       <select id="mode">
         <option value="cpu">vs Computer</option>
-        <option value="pvp">2 players</option>
+        <option value="pvp">Shared device</option>
       </select>
     </label>
-    <label>Tree
+    <label>Players
+      <select id="players">
+        <option value="2">2 players</option>
+        <option value="3">3 players</option>
+        <option value="4">4 players</option>
+      </select>
+    </label>
+    <label>Board
+      <select id="boardKind">
+        <option value="tree">Christmas tree</option>
+        <option value="square">Square (classic boop)</option>
+        <option value="shuffle">Shuffle board (house rules)</option>
+      </select>
+    </label>
+    <label id="levelsBox">Tree
       <select id="levels">
         <option value="4">Classic (4 tiers)</option>
         <option value="5">Big tree: 5 tiers</option>
@@ -38,7 +52,28 @@
         <option value="16">16</option>
       </select>
     </label>
-    <label>Ornaments
+    <label id="sizeBox" hidden>Size
+      <select id="size">
+        <option value="6">6×6 (classic boop)</option>
+        <option value="7">7×7</option>
+        <option value="8">8×8</option>
+        <option value="9">9×9</option>
+        <option value="10">10×10</option>
+      </select>
+    </label>
+    <label id="ghostBox" hidden>Ghost cats
+      <select id="ghost">
+        <option value="off">Off</option>
+        <option value="on">On (house rule)</option>
+      </select>
+    </label>
+    <label id="boopmasBox">Spirits
+      <select id="boopmas">
+        <option value="off">Off</option>
+        <option value="on">Boopmas spirits (house rule)</option>
+      </select>
+    </label>
+    <label id="ornBox">Ornaments
       <select id="ornaments">
         <option value="auto">Auto (more on big trees)</option>
         <option value="classic">Classic (3, one at a time)</option>
@@ -72,12 +107,17 @@
     <div class="board" id="board" aria-label="Christmas tree board"></div>
   </div>
   <section class="panel" id="panel1" data-player="1"></section>
+  <section class="panel" id="panel2" data-player="2" hidden></section>
+  <section class="panel" id="panel3" data-player="3" hidden></section>
 </main>
 <p class="status" id="status" role="status" aria-live="polite"></p>
+<div class="spiritBar" id="spiritBar" hidden></div>
 
 <dialog id="rules">
-  <h2>Rules 🎄</h2>
-  <p class="hint">The tree is seen from above: the centre is the top, each ring outward is one tier lower. The ⭐ marks the treetop, the single cell of tier 1. Kittens and cats can sit there; ornaments can never get up there.</p>
+  <h2>Rules</h2>
+  <p class="hint"><b>Square board</b> (Board: Square): the classic boop bed, 6×6, flat, with no ornaments: steps 2, 3, 4, 7 and 8 below (read "tree" as "board"); steps 1, 5 and 6 and the naughty win do not exist. 7×7 to 10×10 are house sizes with more kittens on Auto.</p>
+  <p class="hint"><b>Shuffle board</b> (Board: Shuffle board, a house adaptation of <i>boop. Shuffle</i>, played with pieces on the square board, no cards): see "Shuffle powers" below.</p>
+  <p class="hint"><b>Christmas tree</b> (boop the Halls!): the tree is seen from above: the centre is the top, each ring outward is one tier lower. The ⭐ marks the treetop, the single cell of tier 1. Kittens and cats can sit there; ornaments can never get up there.</p>
   <ol>
     <li><b>Golden rule:</b> if you have no ornament on the tree, start your turn by hanging one on tier 2 (gold dashed ring). Ornaments do not boop.</li>
     <li>Then place a kitten (or a cat) on any free cell.</li>
@@ -89,6 +129,10 @@
     <li>All your pieces on the tree? Take one back; it returns as a cat.</li>
   </ol>
   <p><b>Win nice:</b> three cats in a row, or all your pieces on the tree as cats. <b>Win naughty:</b> capture 3 of your opponent's ornaments.</p>
+  <p class="hint"><b>3 or 4 players</b> (a house rule; the printed games are for two): everyone gets their own colour, kittens, cats, ornaments (tree) and ghost (square), and turns go round the table in seat order (Snowball, Coal, Frost, Ginger). A boop pushes pieces of every colour. The winning rules are unchanged and count per player: three of your own cats in a row, all your pieces on the tree as cats, or three ornaments of other players knocked off by you (a pounce scores for the cat's owner, even on someone else's turn). Only the player on turn can graduate a line. Pieces carry their seat number on 3 and 4 player boards. With 4 players the kitten count is capped so the board never fills up.</p>
+  <p class="hint"><b>Ghost cats</b> (square board only, a house adaptation of BOOoop's ghost cats): everyone has one ghost. At the end of your turn, if your ghost is in the pool, you may place it on an edge stitch (an arrow button between two edge cells); you can also keep it for later. It appears without any effect. At the end of each of your later turns it moves one stitch forward and scares the two cells beside its stitch sideways: a kitten or cat of any colour moves one cell away, leaping over blockers to the next open cell, or off the bed if there is none. Ghosts are not solid: they block nothing and cannot be booped. A ghost that would land on another ghost's stitch passes through to the next open stitch, and past the last stitch it leaves for the pool (you cannot place it again that turn). Lines, wins and promotion are checked only after the ghost has finished, and a line a ghost makes for someone else graduates only at the end of their own turn. The computer places ghosts with a simple look-ahead.</p>
+  <p class="hint"><b>Boopmas spirits</b> (Christmas tree only, Spirits: Boopmas spirits; a house adaptation of the <i>Ghosts of Boopmas!</i> expansion, built from the publisher's and reviewers' public descriptions, not from the printed rules, so the timing and edge cases are my own choices): whenever a player graduates at least one kitten (a line, or taking a kitten back), the <i>next seat</i> takes the spirit board with three fresh spirits. Together with a normal placement, the holder may call <i>one</i> spirit per turn, each spirit once, until the next graduation resets the board (it goes to the seat after the new graduate). <b>Psst Psst</b>: the placed piece boops only diagonal neighbours. <b>Yet to Pounce</b>: only straight (up, down, left, right) neighbours. <b>Jacob Meowly</b>: pick one piece next to the new piece; only that piece is booped, a kitten may boop a cat, and a piece that is blocked jumps over every piece in its way to the first free cell (off the tree if there is none). Ornaments still never move up a tier, even when they jump. Nobody holds the board before the first graduation.</p>
+  <p class="hint"><b>Shuffle powers</b> (Shuffle board, square, 6 to 10; no ghost cats; a house adaptation of the <i>boop. Shuffle</i> card game, built from reviews and a video walkthrough and played here with pieces: there is no deck and nothing is hidden, you pick the piece you place). Each player's 8+ pieces include <b>1 super kitten</b> and <b>1 scaredy kitten</b>, and each has <b>1 blankie</b>; <b>2 shared wild kittens</b> are available to everyone. <b>Wild</b> pieces belong to nobody: they count for whoever is on turn when they complete a line (a wild kitten that graduates returns to the shared supply as a wild cat, which can then be placed by anyone and also counts for any cat line). <b>Super</b> pieces boop two cells (if the second cell is blocked they move one; a <i>super cat</i> whose neighbour is blocked bumps it over the whole line to the first free cell, or off the board); a super kitten graduates into a super cat. <b>Scaredy kittens</b>: whenever any piece lands beside a scaredy kitten it is booped one cell the same way, chaining on (each scaredy at most once per move; a scaredy graduates into an ordinary cat). The <b>blankie</b> goes on any awake kitten or cat instead of a piece: it boops like a kitten, and the covered piece sleeps: it counts for no line and no win. Booping a sleeping piece takes the blanket off (the piece stays) and the blanket jumps one cell on, putting a piece there to sleep, or goes back to its owner if nothing awake is there.</p>
   <p class="hint">Big tree: same rules, 5 to 8 tiers. Kittens on Auto: 8 on the classic tree, 2 more per extra tier (16 on 8 tiers). Ornaments on Auto: more of them (up to 6), up to 3 hanging at once, hung on the 3rd tier from the bottom so they stay in reach. Capturing 3 still wins. 3D view: drag the board to orbit (left/right turns, up/down tilts), scroll to zoom, or use the ⟲ ⟳ ⤒ ⤓ − + ⌂ buttons and the Q/E, W/S, +/- keys. Keys: <kbd>K</kbd> kitten, <kbd>C</kbd> cat, <kbd>U</kbd> undo.</p>
   <form method="dialog"><button>Let's play!</button></form>
 </dialog>

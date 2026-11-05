@@ -30,7 +30,7 @@ try:
             pg.click('#tiltDown'); assert image() != initial, 'tilt must change world projection'
             pg.click('#camReset'); pg.click('#zoomIn'); assert image() == initial, 'orbit zoom must not move distant stars'
             box=pg.locator('#boardWrap').bounding_box()
-            x=box['x']+box['width']/2; y=box['y']+box['height']/2
+            x=box['x']+box['width']/2; y=min(box['y']+box['height']/2, vp['height']-20)   # on a phone the lower part of the board can be below the fold (the header has one more control)
             pg.mouse.move(x,y); pg.mouse.down(); pg.mouse.move(x+60,y+30,steps=4); pg.mouse.up()
             assert image() != initial, 'drag must immediately change the same sky'
             pg.click('#camReset'); assert image() == initial

@@ -32,17 +32,22 @@ try:
                 seed(pg,source,view)
                 # CSS 3D projection can overlap hit targets; activate the intended button directly.
                 pg.locator(f'.cell[data-idx="{click}"]').evaluate('(e) => e.click()')
-                pg.wait_for_function("document.querySelector('.piece[data-id=\"500\"]').getAnimations().some(a => a.playState === 'running' && a.effect.getTiming().duration === 560)",timeout=5000)
+                # Freeze the boop the moment it runs so slow CI/browser round trips cannot outlast it; resume after probing.
+                pg.wait_for_function("(() => { const a=document.querySelector('.piece[data-id=\"500\"]').getAnimations().find(a => a.playState === 'running' && a.effect.getTiming().duration === __boop.motion.boopMs); if (!a) return false; window.__boopAnim=a; a.pause(); return true; })()",timeout=5000)
                 assert pg.evaluate('__boop.busy'), 'input must be gated during motion'
                 assert pg.locator('#newGame').is_disabled(), 'new game must be gated during motion'
                 assert pg.locator('.cell').evaluate_all('(els) => els.every(e => e.disabled)'), 'cells must be disabled during motion'
-                motion=pg.locator('.piece[data-id="500"]').evaluate('''e => {
-                  const a=e.getAnimations().find(a => a.effect.getTiming().duration === 560);
-                  a.pause(); a.currentTime=100; const start=getComputedStyle(e).transform;
+                motion=pg.evaluate('''() => {
+                  const a=window.__boopAnim, e=document.querySelector('.piece[data-id="500"]');
+                  a.currentTime=100; const start=getComputedStyle(e).transform;
                   a.currentTime=350; const mid=getComputedStyle(e).transform;
-                  a.play(); return [start,mid];
+                  a.currentTime=100; return [start,mid];
                 }''')
                 assert motion[0] != motion[1], f'{view}: piece did not visibly move'
+                timing=pg.evaluate("(() => { const t=window.__boopAnim.effect.getTiming(); return [t.duration, t.easing]; })()")
+                assert 1000 <= timing[0] <= 1200, f'{view}: boop motion should be about one second, got {timing[0]} ms'
+                assert timing[1].startswith('cubic-bezier') and timing[1] != 'linear', f'{view}: boop needs an easing curve, got {timing[1]}'
+                pg.evaluate('window.__boopAnim.play()')
                 idle(pg)
                 assert pg.evaluate(f'__boop.state.b[{target}]?.id' if target is not None else '__boop.state.b.some(q => q && q.id === 500)') == (500 if target is not None else False)
                 assert pg.evaluate('__boop.pieceCount() === __boop.state.b.filter(Boolean).length')
